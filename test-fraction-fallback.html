@@ -1,0 +1,175 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>WebTeX Fraction Fallback Test</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            max-width: 800px;
+            margin: 0 auto;
+            padding: 20px;
+            line-height: 1.6;
+        }
+        .test-section {
+            margin: 30px 0;
+            padding: 20px;
+            border: 1px solid #ddd;
+            border-radius: 8px;
+        }
+        .test-section h3 {
+            margin-top: 0;
+            color: #333;
+        }
+        .math-example {
+            background: #f9f9f9;
+            padding: 15px;
+            margin: 15px 0;
+            border-left: 4px solid #007cba;
+        }
+        .description {
+            color: #666;
+            font-size: 0.9em;
+            margin-bottom: 10px;
+        }
+        .expected {
+            background: #e8f5e8;
+            padding: 10px;
+            margin: 10px 0;
+            border-left: 4px solid #4caf50;
+        }
+        .warning {
+            background: #fff3cd;
+            padding: 10px;
+            margin: 10px 0;
+            border-left: 4px solid #ffc107;
+        }
+    </style>
+</head>
+<body>
+    <h1>WebTeX Fraction Fallback Test</h1>
+    <p>This page tests the fallback system for fraction content that might cause KaTeX font errors like "No character metrics for '½'".</p>
+
+    <div class="warning">
+        <strong>Note:</strong> The extension should automatically detect fraction patterns and use the custom renderer to avoid font-related KaTeX errors.
+    </div>
+
+    <div class="test-section">
+        <h3>Basic Fractions (Font Error Prone)</h3>
+        <div class="description">These fractions might cause KaTeX font errors and should trigger the fallback system.</div>
+        
+        <div class="math-example">
+            <strong>Simple fractions:</strong><br>
+            $\frac{1}{2}$ - One half<br>
+            $\frac{1}{3}$ - One third<br>
+            $\frac{2}{3}$ - Two thirds<br>
+            $\frac{1}{4}$ - One quarter<br>
+            $\frac{3}{4}$ - Three quarters
+        </div>
+        
+        <div class="expected">
+            <strong>Expected:</strong> These should render as proper fractions without font errors.
+        </div>
+    </div>
+
+    <div class="test-section">
+        <h3>Complex Fractions</h3>
+        <div class="description">More complex fractions that might cause font issues.</div>
+        
+        <div class="math-example">
+            <strong>Complex fractions:</strong><br>
+            $\frac{1}{5}$ - One fifth<br>
+            $\frac{2}{5}$ - Two fifths<br>
+            $\frac{3}{5}$ - Three fifths<br>
+            $\frac{4}{5}$ - Four fifths<br>
+            $\frac{1}{6}$ - One sixth<br>
+            $\frac{5}{6}$ - Five sixths
+        </div>
+        
+        <div class="math-example">
+            <strong>Eighth fractions:</strong><br>
+            $\frac{1}{8}$ - One eighth<br>
+            $\frac{3}{8}$ - Three eighths<br>
+            $\frac{5}{8}$ - Five eighths<br>
+            $\frac{7}{8}$ - Seven eighths
+        </div>
+    </div>
+
+    <div class="test-section">
+        <h3>Mixed Content with Fractions</h3>
+        <div class="description">Testing fractions mixed with other mathematical expressions.</div>
+        
+        <div class="math-example">
+            <strong>Mixed expressions:</strong><br>
+            The probability is $\frac{1}{2}$ or 50%.<br>
+            The area is $\frac{1}{4}$ of the total: $A = \frac{1}{4} \times \pi r^2$<br>
+            The ratio is $\frac{3}{4}$ which equals $0.75$<br>
+            For $\frac{1}{3}$ of the time, $x = \frac{2}{3}$
+        </div>
+        
+        <div class="expected">
+            <strong>Expected:</strong> Fractions should render properly alongside other math expressions.
+        </div>
+    </div>
+
+    <div class="test-section">
+        <h3>Fraction in Display Math</h3>
+        <div class="description">Testing fractions in display math mode.</div>
+        
+        <div class="math-example">
+            <strong>Display fractions:</strong><br>
+            $$\frac{1}{2} + \frac{1}{3} = \frac{5}{6}$$
+        </div>
+        
+        <div class="math-example">
+            <strong>Complex display fraction:</strong><br>
+            $$\frac{\frac{1}{2} + \frac{1}{3}}{\frac{1}{4} + \frac{1}{5}} = \frac{\frac{5}{6}}{\frac{9}{20}} = \frac{50}{27}$$
+        </div>
+    </div>
+
+    <div class="test-section">
+        <h3>Console Output Check</h3>
+        <div class="description">Check the browser console for these messages:</div>
+        <div class="expected">
+            <ul>
+                <li>"Fraction content detected, will use custom renderer to avoid font issues"</li>
+                <li>"Using custom renderer for nuclear physics content" (since fractions trigger the same flag)</li>
+                <li>No "No character metrics" errors</li>
+                <li>No KaTeX font-related error messages</li>
+            </ul>
+        </div>
+    </div>
+
+    <div class="test-section">
+        <h3>Font Error Prevention</h3>
+        <div class="description">The extension should prevent these specific KaTeX errors:</div>
+        <div class="warning">
+            <ul>
+                <li>"No character metrics for '½' in style 'Main-Regular' and mode 'text'"</li>
+                <li>"No character metrics for '⅓' in style 'Main-Regular' and mode 'text'"</li>
+                <li>Any other font-related character metric errors</li>
+            </ul>
+        </div>
+    </div>
+
+    <script>
+        // Add some dynamic content to test SPA-like behavior
+        setTimeout(() => {
+            const newSection = document.createElement('div');
+            newSection.className = 'test-section';
+            newSection.innerHTML = `
+                <h3>Dynamically Added Fraction Content</h3>
+                <div class="description">This section was added dynamically to test SPA navigation detection with fraction content.</div>
+                <div class="math-example">
+                    <strong>Dynamic fractions:</strong><br>
+                    $\frac{1}{7}$ - One seventh<br>
+                    $\frac{2}{7}$ - Two sevenths<br>
+                    The sum is $\frac{1}{7} + \frac{2}{7} = \frac{3}{7}$
+                </div>
+            `;
+            document.body.appendChild(newSection);
+        }, 2000);
+    </script>
+</body>
+</html> 

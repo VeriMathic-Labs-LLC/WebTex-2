@@ -32,6 +32,7 @@ let isEnabled = false;
 let latexRenderer = null;
 let useKatex = true; // Flag to control which renderer to use
 let hasNuclearPhysicsContent = false; // Flag to detect nuclear physics content
+let renderDebounceTimer = null; // Debounce timer for rendering
 
 // Initialize LaTeX renderer
 async function initializeLatexRenderer() {
@@ -53,41 +54,52 @@ async function initializeLatexRenderer() {
 }
 
 (async function main () {
-  const { allowedDomains = [] } = await chrome.storage.local.get("allowedDomains");
-  
-  // Allow local files (file://) and check domain allowlist for web pages
-  const isLocalFile = location.protocol === 'file:';
-  const isDomainAllowed = allowedDomains.includes(location.hostname);
-  
-  isEnabled = isLocalFile || isDomainAllowed;
-  
-  // Initialize custom LaTeX renderer as fallback
-  await initializeLatexRenderer();
-  
-  if (isEnabled) {
-    enableRendering();
-  }
-
-  /* listen for domain updates */
-  chrome.runtime.onMessage.addListener(msg => {
-    if (msg.action === "domain-updated" && msg.allowed) {
-      const newIsEnabled = location.protocol === 'file:' || msg.allowed.includes(location.hostname);
-      
-      if (newIsEnabled && !isEnabled) {
-        // Turning ON - enable rendering
-        isEnabled = true;
-        enableRendering();
-        setupNavigationHandlers(); // Also setup navigation detection
-      } else if (!newIsEnabled && isEnabled) {
-        // Turning OFF - disable rendering and restore original text
-        isEnabled = false;
-        disableRendering();
-      }
+  try {
+    const { allowedDomains = [] } = await chrome.storage.local.get("allowedDomains");
+    
+    // Allow local files (file://) and check domain allowlist for web pages
+    const isLocalFile = location.protocol === 'file:';
+    const isDomainAllowed = allowedDomains.includes(location.hostname);
+    
+    isEnabled = isLocalFile || isDomainAllowed;
+    
+    console.log('WebTeX: Initializing on', location.hostname, 'enabled:', isEnabled, 'allowed domains:', allowedDomains);
+    
+    // Initialize custom LaTeX renderer as fallback
+    await initializeLatexRenderer();
+    
+    if (isEnabled) {
+      enableRendering();
     }
-  });
 
-  /* Handle single-page app navigation */
-  setupNavigationHandlers();
+    /* listen for domain updates */
+    chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
+      if (msg.action === "domain-updated" && msg.allowed) {
+        const newIsEnabled = location.protocol === 'file:' || msg.allowed.includes(location.hostname);
+        
+        console.log('WebTeX: Domain update received, new enabled state:', newIsEnabled);
+        
+        if (newIsEnabled && !isEnabled) {
+          // Turning ON - enable rendering
+          isEnabled = true;
+          enableRendering();
+          setupNavigationHandlers(); // Also setup navigation detection
+        } else if (!newIsEnabled && isEnabled) {
+          // Turning OFF - disable rendering and restore original text
+          isEnabled = false;
+          disableRendering();
+        }
+        
+        // Send response to confirm message received
+        sendResponse({ success: true });
+      }
+    });
+
+    /* Handle single-page app navigation */
+    setupNavigationHandlers();
+  } catch (error) {
+    console.error('WebTeX: Error during initialization:', error);
+  }
 })();
 
 // Keep track of whether navigation handlers are already set up
@@ -292,6 +304,14 @@ function preprocessMathText(node) {
         console.log('Fraction content detected, will use custom renderer to avoid font issues');
       }
       
+      // Check if we're on a site that might have CSP issues (GitHub, etc.)
+      if (location.hostname.includes('github.com') || 
+          location.hostname.includes('githubusercontent.com') ||
+          document.querySelector('meta[http-equiv="Content-Security-Policy"]')) {
+        hasNuclearPhysicsContent = true;
+        console.log('CSP-protected site detected, will use custom renderer to avoid font loading issues');
+      }
+      
       // Handle block math: $$...$$ and \[...\]
       // Keep original spacing for display math
       text = text.replace(/\$\$([\s\S]*?)\$\$/g, (m, inner) => {
@@ -364,6 +384,17 @@ function preprocessMathText(node) {
 }
 
 function safeRender (root = document.body) {
+  // Debounce rendering to prevent excessive calls
+  if (renderDebounceTimer) {
+    clearTimeout(renderDebounceTimer);
+  }
+  
+  renderDebounceTimer = setTimeout(() => {
+    _safeRender(root);
+  }, 50);
+}
+
+function _safeRender (root = document.body) {
   try {
     preprocessMathText(root); // Preprocess before rendering
     
@@ -393,17 +424,20 @@ function safeRender (root = document.body) {
             console.warn('KaTeX rendering error:', msg, err);
             katexErrorCount++;
             
-            // Check for font-related errors or multiple errors
+            // Check for font-related errors, CSP errors, or multiple errors
             const isFontError = msg && (
               msg.includes('No character metrics') ||
               msg.includes('font') ||
               msg.includes('character') ||
-              msg.includes('metrics')
+              msg.includes('metrics') ||
+              msg.includes('Content Security Policy') ||
+              msg.includes('CSP') ||
+              msg.includes('font-src')
             );
             
-            // Switch to custom renderer immediately for font errors or after 2+ errors
-            if (isFontError || katexErrorCount > 2) {
-              console.log(`Switching to custom renderer due to ${isFontError ? 'font error' : 'multiple errors'}`);
+            // Switch to custom renderer immediately for font/CSP errors or after 1+ error
+            if (isFontError || katexErrorCount > 1) {
+              console.log(`Switching to custom renderer due to ${isFontError ? 'font/CSP error' : 'multiple errors'}`);
               useKatex = false;
               // Clear any KaTeX elements and re-render
               setTimeout(() => {

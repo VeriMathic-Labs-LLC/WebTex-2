@@ -12,28 +12,71 @@
 .webtex-inline-math {
   display: inline;
   vertical-align: middle;
+  color: #000 !important;
 }
 
 .webtex-display-math {
   display: block;
   text-align: center;
   margin: 1em 0;
+  color: #000 !important;
 }
 
 .webtex-processed {
   display: inline;
+  color: #000 !important;
 }
 
-/* Dark mode support for LaTeX.js */
+/* KaTeX styles for better visibility */
+.katex {
+  color: #000 !important;
+  font-size: 1.1em;
+}
+
+.katex-display {
+  color: #000 !important;
+  margin: 1em 0;
+}
+
+.katex .katex-html {
+  color: #000 !important;
+}
+
+.katex .katex-mathml {
+  color: #000 !important;
+}
+
+/* Ensure all KaTeX elements have proper contrast */
+.katex,
+.katex *,
+.katex .katex-html *,
+.katex .katex-mathml * {
+  color: #000 !important;
+}
+
+/* Dark mode support */
 @media (prefers-color-scheme: dark) {
+  .katex,
+  .katex *,
+  .katex .katex-html *,
+  .katex .katex-mathml *,
   .webtex-inline-math,
-  .webtex-display-math {
-    color: #eee !important;
+  .webtex-display-math,
+  .webtex-processed {
+    color: #fff !important;
   }
-  
-  /* Ensure LaTeX.js elements inherit dark mode colors */
-  .webtex-inline-math *,
-  .webtex-display-math * {
-    color: inherit !important;
-  }
+}
+
+/* Force contrast for specific KaTeX elements */
+.katex .katex-html .base,
+.katex .katex-html .strut,
+.katex .katex-html .mord,
+.katex .katex-html .mbin,
+.katex .katex-html .mrel,
+.katex .katex-html .mopen,
+.katex .katex-html .mclose,
+.katex .katex-html .mpunct,
+.katex .katex-html .minner,
+.katex .katex-html .mop {
+  color: inherit !important;
 } 
