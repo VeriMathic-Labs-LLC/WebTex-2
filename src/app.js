@@ -1,22 +1,11 @@
 /*  src/app.js  – compiled → build/app.js
-    Bundles KaTeX auto‑render + our logic with custom renderer fallback.
+    Enhanced WebTeX with KaTeX + MathJax fallback + custom parser
 */
-import "katex/dist/katex.min.css";
-import renderMathInElement from "katex/dist/contrib/auto-render.mjs";
 import './app.css';
-import LatexRenderer from './latex-renderer.js';
-
-const DELIMITERS = [
-  { left: "$$", right: "$$", display: true },
-  { left: "\\[", right: "\\]", display: true },
-  { left: "$",   right: "$",   display: false },
-  { left: "\\(", right: "\\)", display: false },
-];
+import katex from 'katex';
+import 'katex/dist/katex.min.css';
 
 /* -------------------------------------------------- */
-// Inline math detector with negative lookbehind (Chromium supports this)
-const INLINE_MATH_REGEX = /(?<!\\)\$(?!\$)([^\$\r\n]*?)\$(?!\$)/g;
-
 // Reusable entity decoder for performance
 function decodeHTMLEntities(text) {
   return text.replace(/&amp;/g, '&')
@@ -29,80 +18,377 @@ function decodeHTMLEntities(text) {
 /* -------------------------------------------------- */
 let observer = null;
 let isEnabled = false;
-let latexRenderer = null;
-let useKatex = true; // Flag to control which renderer to use
-let hasNuclearPhysicsContent = false; // Flag to detect nuclear physics content
-let renderDebounceTimer = null; // Debounce timer for rendering
+let mathjaxLoaded = false;
+let katexLoaded = true; // KaTeX is bundled
+let rendererState = {
+  katexSuccess: 0,
+  mathjaxFallback: 0,
+  customParserFallback: 0,
+  totalAttempts: 0
+};
 
-// Initialize LaTeX renderer
-async function initializeLatexRenderer() {
-  try {
-    latexRenderer = new LatexRenderer();
-    // Wait for the renderer to be ready
-    while (!latexRenderer.isReady) {
-      await new Promise(resolve => setTimeout(resolve, 100));
+// Enhanced MathJax configuration
+window.MathJax = {
+  tex: {
+    inlineMath: [['$', '$'], ['\\(', '\\)']],
+    displayMath: [['$$', '$$'], ['\\[', '\\]']],
+    processEscapes: true,
+    processEnvironments: true
+  },
+  options: {
+    skipHtmlTags: ['script', 'noscript', 'style', 'textarea', 'pre', 'code', 'input', 'select', 'button'],
+    ignoreHtmlClass: 'webtex-ignore',
+    processHtmlClass: 'webtex-process'
+  },
+  startup: {
+    typeset: false,
+    ready: () => {
+      mathjaxLoaded = true;
+      console.log('WebTeX: MathJax is ready for fallback rendering.');
+      if (isEnabled) {
+        safeRender();
+      }
+      window.MathJax.startup.defaultReady();
     }
-    console.log('Custom LaTeX renderer is ready (fallback)');
+  }
+};
+
+// Load MathJax for fallback
+const script = document.createElement('script');
+script.type = 'text/javascript';
+script.src = chrome.runtime.getURL('mathjax/es5/tex-chtml-full.js');
+script.async = true;
+document.head.appendChild(script);
+
+/* -------------------------------------------------- */
+// Custom LaTeX Parser for edge cases
+class CustomLatexParser {
+  constructor() {
+    this.supportedEnvironments = [
+      'matrix', 'pmatrix', 'bmatrix', 'vmatrix', 'Vmatrix',
+      'array', 'align', 'aligned', 'gather', 'gathered',
+      'cases', 'split', 'multline', 'eqnarray'
+    ];
+  }
+
+  // Check if expression can be handled by custom parser
+  canHandle(tex) {
+    // Handle basic matrix operations
+    if (tex.includes('\\begin{matrix}') || tex.includes('\\begin{pmatrix}')) {
+      return true;
+    }
     
-    // Trigger rendering if it was enabled before renderer loaded
-    if (isEnabled) {
-      safeRender();
+    // Handle basic alignments
+    if (tex.includes('\\begin{align}') || tex.includes('\\begin{aligned}')) {
+      return true;
     }
-  } catch (error) {
-    console.error('Failed to initialize custom LaTeX renderer:', error);
+    
+    // Handle basic cases
+    if (tex.includes('\\begin{cases}')) {
+      return true;
+    }
+    
+    return false;
+  }
+
+  // Convert to simplified LaTeX that KaTeX can handle
+  simplify(tex) {
+    let simplified = tex;
+    
+    // Replace problematic environments with simpler alternatives
+    simplified = simplified.replace(/\\begin\{align\}/g, '\\begin{aligned}');
+    simplified = simplified.replace(/\\end\{align\}/g, '\\end{aligned}');
+    
+    // Handle matrix environments
+    simplified = simplified.replace(/\\begin\{matrix\}/g, '\\begin{array}');
+    simplified = simplified.replace(/\\end\{matrix\}/g, '\\end{array}');
+    
+    return simplified;
+  }
+
+  // Create a simple fallback rendering
+  renderFallback(tex, displayMode = false) {
+    const container = document.createElement('span');
+    container.className = 'webtex-custom-fallback';
+    container.style.cssText = `
+      display: ${displayMode ? 'block' : 'inline-block'};
+      font-family: 'Computer Modern', serif;
+      font-size: 1.1em;
+      color: #d32f2f;
+      background: #ffebee;
+      padding: 2px 4px;
+      border-radius: 3px;
+      border: 1px solid #ef9a9a;
+    `;
+    container.textContent = tex;
+    return container;
   }
 }
 
-(async function main () {
-  try {
-    const { allowedDomains = [] } = await chrome.storage.local.get("allowedDomains");
-    
-    // Allow local files (file://) and check domain allowlist for web pages
-    const isLocalFile = location.protocol === 'file:';
-    const isDomainAllowed = allowedDomains.includes(location.hostname);
-    
-    isEnabled = isLocalFile || isDomainAllowed;
-    
-    console.log('WebTeX: Initializing on', location.hostname, 'enabled:', isEnabled, 'allowed domains:', allowedDomains);
-    
-    // Initialize custom LaTeX renderer as fallback
-    await initializeLatexRenderer();
-    
-    if (isEnabled) {
-      enableRendering();
-    }
+const customParser = new CustomLatexParser();
 
-    /* listen for domain updates */
-    chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
-      if (msg.action === "domain-updated" && msg.allowed) {
-        const newIsEnabled = location.protocol === 'file:' || msg.allowed.includes(location.hostname);
+/* -------------------------------------------------- */
+// Enhanced rendering function with intelligent fallback
+async function renderMathExpression(tex, displayMode = false, element = null) {
+  rendererState.totalAttempts++;
+  
+  // Try KaTeX first
+  try {
+    const katexOptions = {
+      displayMode: displayMode,
+      throwOnError: false,
+      errorColor: '#cc0000',
+      macros: {
+        "\\RR": "\\mathbb{R}",
+        "\\NN": "\\mathbb{N}",
+        "\\ZZ": "\\mathbb{Z}",
+        "\\QQ": "\\mathbb{Q}",
+        "\\CC": "\\mathbb{C}"
+      }
+    };
+    
+    const rendered = katex.renderToString(tex, katexOptions);
+    rendererState.katexSuccess++;
+    
+    if (element) {
+      element.innerHTML = rendered;
+      element.classList.add('webtex-katex-rendered');
+    }
+    
+    return { success: true, method: 'katex', element: element };
+  } catch (katexError) {
+    console.debug('WebTeX: KaTeX failed, trying MathJax fallback:', katexError.message);
+    
+    // Try MathJax fallback
+    if (mathjaxLoaded) {
+      try {
+        if (element) {
+          element.className = 'mj';
+          element.innerHTML = displayMode ? `\\[${tex}\\]` : `\\(${tex}\\)`;
+          
+          await window.MathJax.typesetPromise([element]);
+          rendererState.mathjaxFallback++;
+          element.classList.add('webtex-mathjax-rendered');
+          
+          return { success: true, method: 'mathjax', element: element };
+        }
+      } catch (mathjaxError) {
+        console.debug('WebTeX: MathJax fallback failed:', mathjaxError.message);
+      }
+    }
+    
+    // Try custom parser as last resort
+    if (customParser.canHandle(tex)) {
+      try {
+        const simplified = customParser.simplify(tex);
+        const rendered = katex.renderToString(simplified, { displayMode, throwOnError: false });
         
-        console.log('WebTeX: Domain update received, new enabled state:', newIsEnabled);
-        
-        if (newIsEnabled && !isEnabled) {
-          // Turning ON - enable rendering
-          isEnabled = true;
-          enableRendering();
-          setupNavigationHandlers(); // Also setup navigation detection
-        } else if (!newIsEnabled && isEnabled) {
-          // Turning OFF - disable rendering and restore original text
-          isEnabled = false;
-          disableRendering();
+        if (element) {
+          element.innerHTML = rendered;
+          element.classList.add('webtex-custom-rendered');
         }
         
-        // Send response to confirm message received
-        sendResponse({ success: true });
+        rendererState.customParserFallback++;
+        return { success: true, method: 'custom', element: element };
+      } catch (customError) {
+        console.debug('WebTeX: Custom parser failed:', customError.message);
+      }
+    }
+    
+    // Final fallback - show original text with error styling
+    if (element) {
+      const fallbackElement = customParser.renderFallback(tex, displayMode);
+      element.innerHTML = '';
+      element.appendChild(fallbackElement);
+      element.classList.add('webtex-error-fallback');
+    }
+    
+    return { success: false, method: 'error', element: element };
+  }
+}
+
+/* -------------------------------------------------- */
+// Enhanced math detection and processing
+function findMathExpressions(root) {
+  const mathExpressions = [];
+  const walker = document.createTreeWalker(
+    root,
+    NodeFilter.SHOW_TEXT,
+    {
+      acceptNode: function(node) {
+        // Skip if parent is already processed or should be ignored
+        if (node.parentElement && (
+          node.parentElement.classList.contains('webtex-processed') ||
+          node.parentElement.classList.contains('webtex-ignore') ||
+          node.parentElement.closest('.webtex-ignore')
+        )) {
+          return NodeFilter.FILTER_REJECT;
+        }
+        return NodeFilter.FILTER_ACCEPT;
+      }
+    }
+  );
+
+  let node;
+  while (node = walker.nextNode()) {
+    const text = node.textContent;
+    
+    // Enhanced regex patterns for math detection
+    const patterns = [
+      // Display math
+      { pattern: /\$\$([\s\S]*?)\$\$/g, display: true },
+      { pattern: /\\\[([\s\S]*?)\\\]/g, display: true },
+      // Inline math
+      { pattern: /\$([^\$\n]+?)\$/g, display: false },
+      { pattern: /\\\(([\s\S]*?)\\\)/g, display: false }
+    ];
+
+    patterns.forEach(({ pattern, display }) => {
+      let match;
+      while ((match = pattern.exec(text)) !== null) {
+        const tex = decodeHTMLEntities(match[1].trim());
+        if (tex) {
+          mathExpressions.push({
+            tex: tex,
+            display: display,
+            node: node,
+            match: match[0],
+            start: match.index,
+            end: match.index + match[0].length
+          });
+        }
       }
     });
-
-    /* Handle single-page app navigation */
-    setupNavigationHandlers();
-  } catch (error) {
-    console.error('WebTeX: Error during initialization:', error);
   }
+
+  return mathExpressions;
+}
+
+/* -------------------------------------------------- */
+// Process math expressions with intelligent fallback
+async function processMathExpressions(expressions) {
+  const processedNodes = new Set();
+  
+  for (const expr of expressions) {
+    if (processedNodes.has(expr.node)) continue;
+    
+    const text = expr.node.textContent;
+    const container = document.createElement('span');
+    container.className = 'webtex-math-container';
+    
+    // Replace the math expression with a container
+    const before = text.substring(0, expr.start);
+    const after = text.substring(expr.end);
+    
+    if (before) {
+      container.appendChild(document.createTextNode(before));
+    }
+    
+    const mathElement = document.createElement('span');
+    mathElement.className = `webtex-math ${expr.display ? 'webtex-display' : 'webtex-inline'}`;
+    
+    const result = await renderMathExpression(expr.tex, expr.display, mathElement);
+    
+    if (result.success) {
+      container.appendChild(mathElement);
+    } else {
+      // Keep original text if all renderers failed
+      container.appendChild(document.createTextNode(expr.match));
+    }
+    
+    if (after) {
+      container.appendChild(document.createTextNode(after));
+    }
+    
+    expr.node.parentNode.replaceChild(container, expr.node);
+    processedNodes.add(expr.node);
+  }
+}
+
+/* -------------------------------------------------- */
+// Enhanced preprocessing
+function preprocessMathText(node) {
+  if (!node || !node.childNodes) return;
+  
+  node.childNodes.forEach(child => {
+    if (child.nodeType === 3) { // Text node
+      let text = child.textContent;
+      text = decodeHTMLEntities(text);
+      
+      // Enhanced environment handling
+      text = text.replace(/\$\s*\\begin\{([^}]+)\}([\s\S]*?)\\end\{\1\}\s*\$/g, (m, env, content) => {
+        const decodedContent = decodeHTMLEntities(content);
+        return '$$\\begin{' + env + '}' + decodedContent + '\\end{' + env + '}$$';
+      });
+      
+      child.textContent = text;
+    } else if (child.nodeType === 1 && !["SCRIPT","STYLE","TEXTAREA","PRE","CODE","NOSCRIPT","INPUT","SELECT","BUTTON"].includes(child.tagName)) {
+      preprocessMathText(child);
+    }
+  });
+}
+
+/* -------------------------------------------------- */
+// Main rendering function
+async function safeRender(root = document.body) {
+  if (!isEnabled) return;
+  
+  try {
+    preprocessMathText(root);
+    
+    const expressions = findMathExpressions(root);
+    if (expressions.length > 0) {
+      await processMathExpressions(expressions);
+      
+      // Log rendering statistics
+      console.log('WebTeX: Rendering complete', {
+        total: rendererState.totalAttempts,
+        katex: rendererState.katexSuccess,
+        mathjax: rendererState.mathjaxFallback,
+        custom: rendererState.customParserFallback,
+        successRate: ((rendererState.katexSuccess + rendererState.mathjaxFallback + rendererState.customParserFallback) / rendererState.totalAttempts * 100).toFixed(1) + '%'
+      });
+    }
+  } catch (e) {
+    console.error('WebTeX: Error during rendering', e);
+  }
+}
+
+/* -------------------------------------------------- */
+// Main initialization
+(async function main() {
+  const { allowedDomains = [] } = await chrome.storage.local.get("allowedDomains");
+  
+  const isLocalFile = location.protocol === 'file:';
+  const isDomainAllowed = allowedDomains.includes(location.hostname);
+  
+  isEnabled = isLocalFile || isDomainAllowed;
+  
+  if (isEnabled) {
+    enableRendering();
+  }
+
+  // Listen for domain updates
+  chrome.runtime.onMessage.addListener(msg => {
+    if (msg.action === "domain-updated" && msg.allowed) {
+      const newIsEnabled = location.protocol === 'file:' || msg.allowed.includes(location.hostname);
+      
+      if (newIsEnabled && !isEnabled) {
+        isEnabled = true;
+        enableRendering();
+        setupNavigationHandlers();
+      } else if (!newIsEnabled && isEnabled) {
+        isEnabled = false;
+        disableRendering();
+      }
+    }
+  });
+
+  setupNavigationHandlers();
 })();
 
-// Keep track of whether navigation handlers are already set up
+/* -------------------------------------------------- */
+// Navigation and observer setup
 let navigationHandlersSetup = false;
 
 function setupNavigationHandlers() {
@@ -111,440 +397,89 @@ function setupNavigationHandlers() {
   navigationHandlersSetup = true;
   let lastUrl = location.href;
   
-  // Handle clicks on links (for traditional navigation)
-  document.addEventListener('click', (e) => {
-    // Find the closest anchor element
-    const link = e.target.closest('a');
-    if (link && link.href && !link.target && link.href.startsWith(location.origin)) {
-      // Internal link clicked - navigation will happen
-      setTimeout(() => {
-        if (location.href !== lastUrl) {
-          lastUrl = location.href;
-          handleNavigation();
-        }
-      }, 50);
-    }
-  }, true);
-  
-  // Handle back/forward navigation
-  window.addEventListener('popstate', () => {
+  const debouncedNavigationHandler = debounce(handleNavigation, 100);
+
+  const navigationObserver = new MutationObserver(() => {
     if (location.href !== lastUrl) {
       lastUrl = location.href;
-      handleNavigation();
+      debouncedNavigationHandler();
     }
   });
-  
-  // Override pushState and replaceState to detect programmatic navigation
-  const originalPushState = history.pushState;
-  const originalReplaceState = history.replaceState;
-  
-  history.pushState = function() {
-    originalPushState.apply(history, arguments);
-    setTimeout(() => {
-      if (location.href !== lastUrl) {
-        lastUrl = location.href;
-        handleNavigation();
-      }
-    }, 0);
-  };
-  
-  history.replaceState = function() {
-    originalReplaceState.apply(history, arguments);
-    setTimeout(() => {
-      if (location.href !== lastUrl) {
-        lastUrl = location.href;
-        handleNavigation();
-      }
-    }, 0);
-  };
-  
-  // Monitor for significant DOM changes that might indicate navigation
-  // This helps catch navigation in SPAs that don't change URLs
-  watchForMajorDOMChanges();
-}
 
-function watchForMajorDOMChanges() {
-  let contentHash = '';
-  
-  // Function to generate a simple hash of main content areas
-  function getContentHash() {
-    const main = document.querySelector('main, article, [role="main"], .content, #content') || document.body;
-    // Get a simple representation of the content structure
-    return main.children.length + '-' + main.textContent.length;
-  }
-  
-  // Check periodically for major content changes
-  setInterval(() => {
-    const newHash = getContentHash();
-    if (newHash !== contentHash && contentHash !== '') {
-      contentHash = newHash;
-      handleNavigation();
-    }
-    contentHash = newHash;
-  }, 1000);
+  navigationObserver.observe(document.body, { childList: true, subtree: true });
+  window.addEventListener('popstate', debouncedNavigationHandler);
 }
 
 function handleNavigation() {
   if (!isEnabled) return;
-  
-  // Re-render the entire page on navigation
   console.debug('WebTeX: Detected navigation, re-rendering math');
-  
-  // Small delay to ensure new content is loaded
-  setTimeout(() => {
-    safeRender();
-  }, 100);
+  safeRender();
 }
 
 function enableRendering() {
-  safeRender();                              // ★ renamed from renderWholePage()
+  safeRender();
 
-  /* re‑render on DOM changes ------------------------------------- */
   observer = new MutationObserver(debounce(muts => {
-    /* ① If mutations are only UI ripples → ignore ---------------- */
-    if (mutationsOnlyRipple(muts)) return;          // ★ new guard
+    if (mutationsOnlyRipple(muts) || userIsSelectingText() || typingInsideActiveElement(muts)) {
+      return;
+    }
 
-    /* ② If user is selecting text → ignore ----------------------- */
-    if (userIsSelectingText()) return;              // ★ new guard
-
-    /* ③ If user is typing in an active editor → ignore ----------- */
-    if (typingInsideActiveElement(muts)) return;    // ★ new guard
-
-    /* ④ Otherwise, re‑render only the nodes that were added ------ */
     muts.flatMap(m => [...m.addedNodes])
-        .filter(n => n.nodeType === 1)
+        .filter(n => n.nodeType === 1 && !n.closest('.webtex-ignore'))
         .forEach(safeRender);
   }, 200));
-  observer.observe(document.body, { childList:true, subtree:true });
+  
+  observer.observe(document.body, { childList: true, subtree: true });
 }
 
 function disableRendering() {
-  // Stop observing changes
   if (observer) {
     observer.disconnect();
     observer = null;
   }
   
-  if (useKatex) {
-    // Remove all rendered KaTeX elements and restore original text
-    const katexElements = document.querySelectorAll('.katex');
-    katexElements.forEach(elem => {
-      try {
-        // Find the original math delimiter
-        const mathAnnotation = elem.querySelector('annotation[encoding="application/x-tex"]');
-        if (!mathAnnotation) return;
-        
-        const mathContent = mathAnnotation.textContent;
-        
-        // Check if parent element still exists (element might have been removed)
-        if (!elem.parentNode) return;
-        
-        // Determine if it was display or inline math
-        const isDisplay = elem.classList.contains('katex-display');
-        let originalText = mathContent;
-        
-        // Try to restore with proper delimiters based on context
-        if (isDisplay) {
-          // For display math, check if it contains environments
-          if (/\\begin\{/.test(mathContent)) {
-            originalText = '$$' + mathContent + '$$';
-          } else {
-            // Could be $$ or \[ \], default to $$
-            originalText = '$$' + mathContent + '$$';
-          }
-        } else {
-          // For inline math, default to $
-          originalText = '$' + mathContent + '$';
-        }
-        
-        // Replace the KaTeX element with a text node
-        const textNode = document.createTextNode(originalText);
-        
-        // Handle case where KaTeX might have wrapped content in additional spans
-        const parent = elem.parentNode;
-        if (parent.classList && parent.classList.contains('katex-display')) {
-          parent.parentNode.replaceChild(textNode, parent);
-        } else {
-          elem.parentNode.replaceChild(textNode, elem);
-        }
-      } catch (e) {
-        console.warn('WebTeX: Error restoring math element', e);
-      }
-    });
-  } else {
-    // Clear all rendered LaTeX using custom renderer
-    if (latexRenderer) {
-      latexRenderer.clear();
-    }
+  if (window.MathJax && window.MathJax.typesetClear) {
+    window.MathJax.typesetClear();
   }
-}
-
-/* ---------- core ---------- */
-
-function preprocessMathText(node) {
-  if (!node || !node.childNodes) return;
-  node.childNodes.forEach(child => {
-    if (child.nodeType === 3) { // Text node
-      let text = child.textContent;
-      
-      // First, decode HTML entities
-      text = decodeHTMLEntities(text);
-      
-      // Check for nuclear physics patterns that KaTeX struggles with
-      if (/\\text\{_[^}]+\^[^}]+\s+[^}]+\}/.test(text) || 
-          /\\text\{[A-Za-z]+\^[^}]+\s+[^}]+\}/.test(text) ||
-          /\\text\{\{[^}]+\}\^\{[^}]+\}\s+[^}]+\}/.test(text)) {
-        hasNuclearPhysicsContent = true;
-        console.log('Nuclear physics content detected, will use custom renderer');
-      }
-      
-      // Check for fraction patterns that might cause font issues
-      if (/\\frac\{[^}]+\}\{[^}]+\}/.test(text)) {
-        hasNuclearPhysicsContent = true;
-        console.log('Fraction content detected, will use custom renderer to avoid font issues');
-      }
-      
-      // Check if we're on a site that might have CSP issues (GitHub, etc.)
-      if (location.hostname.includes('github.com') || 
-          location.hostname.includes('githubusercontent.com') ||
-          document.querySelector('meta[http-equiv="Content-Security-Policy"]')) {
-        hasNuclearPhysicsContent = true;
-        console.log('CSP-protected site detected, will use custom renderer to avoid font loading issues');
-      }
-      
-      // Handle block math: $$...$$ and \[...\]
-      // Keep original spacing for display math
-      text = text.replace(/\$\$([\s\S]*?)\$\$/g, (m, inner) => {
-        // Decode entities within math content as well
-        const decodedInner = decodeHTMLEntities(inner);
-        return inner !== undefined ? '$$' + decodedInner + '$$' : m;
-      });
-      
-      text = text.replace(/\\\[([\s\S]*?)\\\]/g, (m, inner) => {
-        const decodedInner = inner.replace(/&amp;/g, '&')
-                                  .replace(/&lt;/g, '<')
-                                  .replace(/&gt;/g, '>')
-                                  .replace(/&quot;/g, '"')
-                                  .replace(/&#39;/g, "'");
-        return inner !== undefined ? '\\[' + decodedInner + '\\]' : m;
-      });
-      
-      // Special handling for single $ with multi-line content (convert to display math)
-      // Check the full match to avoid already delimited content
-      text = text.replace(/\$\s*\\begin\{([^}]+)\}([\s\S]*?)\\end\{\1\}\s*\$/g, (m, env, content, offset, str) => {
-        // Check if this is already within $$ delimiters
-        if (offset > 0 && str[offset - 1] === '$') return m;
-        if (offset + m.length < str.length && str[offset + m.length] === '$') return m;
-        
-        const decodedContent = decodeHTMLEntities(content);
-        return '$$\\begin{' + env + '}' + decodedContent + '\\end{' + env + '}$$';
-      });
-      
-      // Handle inline math: $...$ and \(...\)
-      // Simplified approach - less restrictive pattern matching
-      text = text.replace(INLINE_MATH_REGEX, (m, inner) => {
-        const trimmed = inner.trim();
-        
-        // Check if this contains environments that should be display math
-        if (/\\begin\{(align|equation|gather|multline)/.test(trimmed)) {
-          return '$$' + trimmed + '$$';
-        }
-        
-        // Accept any non-empty content that contains typical math characters
-        // This is more permissive and handles mixed content better
-        if (trimmed && (
-          /\\[a-zA-Z]/.test(trimmed) ||           // LaTeX commands
-          /[a-zA-Z]_/.test(trimmed) ||            // Subscripts
-          /[a-zA-Z]\^/.test(trimmed) ||           // Superscripts  
-          /[{}\[\]()]/.test(trimmed) ||           // Braces/brackets
-          /[=+\-*/≤≥≠∞∂∇∆Ω∈∉⊂⊃∪∩∀∃∑∏∫√±]/.test(trimmed) || // Math symbols
-          (/[a-zA-Z]/.test(trimmed) && /[0-9]/.test(trimmed)) // Variables with numbers
-        )) {
-          // Decode entities within inline math too
-          const decodedTrimmed = decodeHTMLEntities(trimmed);
-          return '$' + decodedTrimmed + '$';
-        }
-        return m;
-      });
-      
-      // Handle \(...\) - parentheses delimited inline math
-      text = text.replace(/\\\(([^\)\r\n]*?)\\\)/g, (m, inner) => {
-        if (inner !== undefined) {
-          const decodedInner = decodeHTMLEntities(inner);
-          return '\\(' + decodedInner + '\\)';
-        }
-        return m;
-      });
-      
-      child.textContent = text;
-    } else if (child.nodeType === 1 && !["SCRIPT","STYLE","TEXTAREA","PRE","CODE","NOSCRIPT","INPUT","SELECT"].includes(child.tagName)) {
-      preprocessMathText(child);
-    }
+  
+  // Clear KaTeX rendered elements
+  document.querySelectorAll('.webtex-katex-rendered, .webtex-mathjax-rendered, .webtex-custom-rendered').forEach(el => {
+    el.classList.remove('webtex-katex-rendered', 'webtex-mathjax-rendered', 'webtex-custom-rendered');
   });
 }
 
-function safeRender (root = document.body) {
-  // Debounce rendering to prevent excessive calls
-  if (renderDebounceTimer) {
-    clearTimeout(renderDebounceTimer);
-  }
-  
-  renderDebounceTimer = setTimeout(() => {
-    _safeRender(root);
-  }, 50);
-}
-
-function _safeRender (root = document.body) {
-  try {
-    preprocessMathText(root); // Preprocess before rendering
-    
-    // If nuclear physics content is detected, use custom renderer directly
-    if (hasNuclearPhysicsContent) {
-      console.log('Using custom renderer for nuclear physics content');
-      useKatex = false;
-      if (latexRenderer && latexRenderer.isReady) {
-        latexRenderer.renderAllLatex(root);
-      }
-      return;
-    }
-    
-    if (useKatex) {
-      // Try KaTeX first
-      try {
-        let katexErrorCount = 0;
-        
-        renderMathInElement(root, {
-          delimiters: DELIMITERS,
-          ignoredTags: [
-            "script","style","textarea","pre","code","noscript",
-            "input","select",
-          ],
-          strict: "ignore",
-          errorCallback: (msg, err) => {
-            console.warn('KaTeX rendering error:', msg, err);
-            katexErrorCount++;
-            
-            // Check for font-related errors, CSP errors, or multiple errors
-            const isFontError = msg && (
-              msg.includes('No character metrics') ||
-              msg.includes('font') ||
-              msg.includes('character') ||
-              msg.includes('metrics') ||
-              msg.includes('Content Security Policy') ||
-              msg.includes('CSP') ||
-              msg.includes('font-src')
-            );
-            
-            // Switch to custom renderer immediately for font/CSP errors or after 1+ error
-            if (isFontError || katexErrorCount > 1) {
-              console.log(`Switching to custom renderer due to ${isFontError ? 'font/CSP error' : 'multiple errors'}`);
-              useKatex = false;
-              // Clear any KaTeX elements and re-render
-              setTimeout(() => {
-                const katexElements = document.querySelectorAll('.katex, .katex-error');
-                katexElements.forEach(elem => {
-                  if (elem.parentNode) {
-                    const originalText = elem.getAttribute('data-original-text') || elem.textContent;
-                    const textNode = document.createTextNode(originalText);
-                    elem.parentNode.replaceChild(textNode, elem);
-                  }
-                });
-                if (latexRenderer && latexRenderer.isReady) {
-                  latexRenderer.renderAllLatex(root);
-                }
-              }, 10);
-            }
-            
-            // Don't return the error message - let KaTeX continue
-            return false;
-          }
-        });
-        
-        // Check for KaTeX errors after rendering
-        setTimeout(() => {
-          const katexErrors = document.querySelectorAll('.katex-error');
-          if (katexErrors.length > 0) {
-            console.log('KaTeX errors detected after rendering, switching to custom renderer');
-            useKatex = false;
-            // Clear KaTeX errors and re-render with custom renderer
-            katexErrors.forEach(elem => {
-              if (elem.parentNode) {
-                const originalText = elem.getAttribute('data-original-text') || elem.textContent;
-                const textNode = document.createTextNode(originalText);
-                elem.parentNode.replaceChild(textNode, elem);
-              }
-            });
-            if (latexRenderer && latexRenderer.isReady) {
-              latexRenderer.renderAllLatex(root);
-            }
-          }
-        }, 100);
-        
-      } catch (e) {
-        console.warn('KaTeX failed completely, falling back to custom renderer:', e);
-        useKatex = false;
-        if (latexRenderer && latexRenderer.isReady) {
-          latexRenderer.renderAllLatex(root);
-        }
-      }
-    } else {
-      // Use custom renderer
-      if (latexRenderer && latexRenderer.isReady) {
-        latexRenderer.renderAllLatex(root);
-      }
-    }
-  } catch (e) {
-    console.error('WebTeX: Error during rendering', e);
-    // Final fallback - try custom renderer even if everything else fails
-    if (latexRenderer && latexRenderer.isReady) {
-      try {
-        latexRenderer.renderAllLatex(root);
-      } catch (fallbackError) {
-        console.error('WebTeX: Custom renderer also failed:', fallbackError);
-      }
-    }
-  }
-}
-
-/* ---------- helpers ---------- */
-
-/* Skip nodes inside <input>, <textarea>, or [contenteditable] ------- */
-function nodeIsEditable (n) {
-  // Treat [contenteditable="false"] as non-editable despite the isContentEditable flag
+/* -------------------------------------------------- */
+// Helper functions
+function nodeIsEditable(n) {
   if (n.getAttribute && n.getAttribute('contenteditable') === 'false') return false;
-  return n.isContentEditable ||
-         (n.nodeType === 1 &&
-          /^(INPUT|TEXTAREA|SELECT)$/.test(n.tagName));
+  return n.isContentEditable || (n.nodeType === 1 && /^(INPUT|TEXTAREA|SELECT)$/.test(n.tagName));
 }
 
-/* Mutations entirely inside the active editor? --------------------- */
-function typingInsideActiveElement (muts) {         // ★ new
+function typingInsideActiveElement(muts) {
   const active = document.activeElement;
   if (!active || !nodeIsEditable(active)) return false;
   return muts.every(m => active.contains(m.target));
 }
 
-/* True if the user currently has text selected -------------------- */
-function userIsSelectingText () {
+function userIsSelectingText() {
   const sel = document.getSelection();
   return sel && sel.rangeCount > 0 && !sel.isCollapsed;
 }
 
-/* Ignore Angular / MDC hover‑ripples to avoid re‑renders ------------ */
-function isRippleNode (n) {                         // ★ new
+function isRippleNode(n) {
   return n.nodeType === 1 && n.classList && (
     n.classList.contains("mat-ripple") ||
     n.classList.contains("mdc-button__ripple") ||
     n.classList.contains("mat-focus-indicator")
   );
 }
-function mutationsOnlyRipple (muts) {              // ★ new
+
+function mutationsOnlyRipple(muts) {
   return muts.every(m =>
     [...m.addedNodes, ...m.removedNodes].every(isRippleNode)
   );
 }
 
-/* Simple debounce helper ------------------------------------------- */
-function debounce (fn, ms) {
+function debounce(fn, ms) {
   let t; return (...a) => { clearTimeout(t); t = setTimeout(() => fn(...a), ms); };
 }
