@@ -1,7 +1,9 @@
 /*  src/app.js  – compiled → build/app.js
-    Bundles MathJax auto‑render + our logic.
+    Enhanced WebTeX with KaTeX + MathJax fallback + custom parser
 */
 import './app.css';
+import katex from 'katex';
+import 'katex/dist/katex.min.css';
 
 /* -------------------------------------------------- */
 // Reusable entity decoder for performance
@@ -17,8 +19,15 @@ function decodeHTMLEntities(text) {
 let observer = null;
 let isEnabled = false;
 let mathjaxLoaded = false;
+let katexLoaded = true; // KaTeX is bundled
+let rendererState = {
+  katexSuccess: 0,
+  mathjaxFallback: 0,
+  customParserFallback: 0,
+  totalAttempts: 0
+};
 
-// Configure MathJax
+// Enhanced MathJax configuration
 window.MathJax = {
   tex: {
     inlineMath: [['$', '$'], ['\\(', '\\)']],
@@ -32,11 +41,10 @@ window.MathJax = {
     processHtmlClass: 'webtex-process'
   },
   startup: {
-    typeset: false, // we'll typeset manually
+    typeset: false,
     ready: () => {
       mathjaxLoaded = true;
-      console.log('MathJax is ready.');
-      // Trigger rendering if it was enabled before MathJax loaded
+      console.log('WebTeX: MathJax is ready for fallback rendering.');
       if (isEnabled) {
         safeRender();
       }
@@ -45,119 +53,269 @@ window.MathJax = {
   }
 };
 
-// Load MathJax
+// Load MathJax for fallback
 const script = document.createElement('script');
 script.type = 'text/javascript';
 script.src = chrome.runtime.getURL('mathjax/es5/tex-chtml-full.js');
 script.async = true;
 document.head.appendChild(script);
 
-
-(async function main () {
-  const { allowedDomains = [] } = await chrome.storage.local.get("allowedDomains");
-  
-  // Allow local files (file://) and check domain allowlist for web pages
-  const isLocalFile = location.protocol === 'file:';
-  const isDomainAllowed = allowedDomains.includes(location.hostname);
-  
-  isEnabled = isLocalFile || isDomainAllowed;
-  
-  if (isEnabled) {
-    enableRendering();
+/* -------------------------------------------------- */
+// Custom LaTeX Parser for edge cases
+class CustomLatexParser {
+  constructor() {
+    this.supportedEnvironments = [
+      'matrix', 'pmatrix', 'bmatrix', 'vmatrix', 'Vmatrix',
+      'array', 'align', 'aligned', 'gather', 'gathered',
+      'cases', 'split', 'multline', 'eqnarray'
+    ];
   }
 
-  /* listen for domain updates */
-  chrome.runtime.onMessage.addListener(msg => {
-    if (msg.action === "domain-updated" && msg.allowed) {
-      const newIsEnabled = location.protocol === 'file:' || msg.allowed.includes(location.hostname);
-      
-      if (newIsEnabled && !isEnabled) {
-        // Turning ON - enable rendering
-        isEnabled = true;
-        enableRendering();
-        setupNavigationHandlers(); // Also setup navigation detection
-      } else if (!newIsEnabled && isEnabled) {
-        // Turning OFF - disable rendering and restore original text
-        isEnabled = false;
-        disableRendering();
+  // Check if expression can be handled by custom parser
+  canHandle(tex) {
+    // Handle basic matrix operations
+    if (tex.includes('\\begin{matrix}') || tex.includes('\\begin{pmatrix}')) {
+      return true;
+    }
+    
+    // Handle basic alignments
+    if (tex.includes('\\begin{align}') || tex.includes('\\begin{aligned}')) {
+      return true;
+    }
+    
+    // Handle basic cases
+    if (tex.includes('\\begin{cases}')) {
+      return true;
+    }
+    
+    return false;
+  }
+
+  // Convert to simplified LaTeX that KaTeX can handle
+  simplify(tex) {
+    let simplified = tex;
+    
+    // Replace problematic environments with simpler alternatives
+    simplified = simplified.replace(/\\begin\{align\}/g, '\\begin{aligned}');
+    simplified = simplified.replace(/\\end\{align\}/g, '\\end{aligned}');
+    
+    // Handle matrix environments
+    simplified = simplified.replace(/\\begin\{matrix\}/g, '\\begin{array}');
+    simplified = simplified.replace(/\\end\{matrix\}/g, '\\end{array}');
+    
+    return simplified;
+  }
+
+  // Create a simple fallback rendering
+  renderFallback(tex, displayMode = false) {
+    const container = document.createElement('span');
+    container.className = 'webtex-custom-fallback';
+    container.style.cssText = `
+      display: ${displayMode ? 'block' : 'inline-block'};
+      font-family: 'Computer Modern', serif;
+      font-size: 1.1em;
+      color: #d32f2f;
+      background: #ffebee;
+      padding: 2px 4px;
+      border-radius: 3px;
+      border: 1px solid #ef9a9a;
+    `;
+    container.textContent = tex;
+    return container;
+  }
+}
+
+const customParser = new CustomLatexParser();
+
+/* -------------------------------------------------- */
+// Enhanced rendering function with intelligent fallback
+async function renderMathExpression(tex, displayMode = false, element = null) {
+  rendererState.totalAttempts++;
+  
+  // Try KaTeX first
+  try {
+    const katexOptions = {
+      displayMode: displayMode,
+      throwOnError: false,
+      errorColor: '#cc0000',
+      macros: {
+        "\\RR": "\\mathbb{R}",
+        "\\NN": "\\mathbb{N}",
+        "\\ZZ": "\\mathbb{Z}",
+        "\\QQ": "\\mathbb{Q}",
+        "\\CC": "\\mathbb{C}"
+      }
+    };
+    
+    const rendered = katex.renderToString(tex, katexOptions);
+    rendererState.katexSuccess++;
+    
+    if (element) {
+      element.innerHTML = rendered;
+      element.classList.add('webtex-katex-rendered');
+    }
+    
+    return { success: true, method: 'katex', element: element };
+  } catch (katexError) {
+    console.debug('WebTeX: KaTeX failed, trying MathJax fallback:', katexError.message);
+    
+    // Try MathJax fallback
+    if (mathjaxLoaded) {
+      try {
+        if (element) {
+          element.className = 'mj';
+          element.innerHTML = displayMode ? `\\[${tex}\\]` : `\\(${tex}\\)`;
+          
+          await window.MathJax.typesetPromise([element]);
+          rendererState.mathjaxFallback++;
+          element.classList.add('webtex-mathjax-rendered');
+          
+          return { success: true, method: 'mathjax', element: element };
+        }
+      } catch (mathjaxError) {
+        console.debug('WebTeX: MathJax fallback failed:', mathjaxError.message);
       }
     }
-  });
-
-  /* Handle single-page app navigation */
-  setupNavigationHandlers();
-})();
-
-// Keep track of whether navigation handlers are already set up
-let navigationHandlersSetup = false;
-
-function setupNavigationHandlers() {
-  if (!isEnabled || navigationHandlersSetup) return;
-  
-  navigationHandlersSetup = true;
-  let lastUrl = location.href;
-  
-  // Create a debounced navigation handler
-  const debouncedNavigationHandler = debounce(handleNavigation, 100);
-
-  const navigationObserver = new MutationObserver(() => {
-    if (location.href !== lastUrl) {
-      lastUrl = location.href;
-      debouncedNavigationHandler();
+    
+    // Try custom parser as last resort
+    if (customParser.canHandle(tex)) {
+      try {
+        const simplified = customParser.simplify(tex);
+        const rendered = katex.renderToString(simplified, { displayMode, throwOnError: false });
+        
+        if (element) {
+          element.innerHTML = rendered;
+          element.classList.add('webtex-custom-rendered');
+        }
+        
+        rendererState.customParserFallback++;
+        return { success: true, method: 'custom', element: element };
+      } catch (customError) {
+        console.debug('WebTeX: Custom parser failed:', customError.message);
+      }
     }
-  });
-
-  navigationObserver.observe(document.body, { childList: true, subtree: true });
-  
-  // Handle back/forward navigation
-  window.addEventListener('popstate', debouncedNavigationHandler);
-}
-
-function handleNavigation() {
-  if (!isEnabled) return;
-  console.debug('WebTeX: Detected navigation, re-rendering math');
-  safeRender();
-}
-
-function enableRendering() {
-  safeRender();
-
-  /* re‑render on DOM changes */
-  observer = new MutationObserver(debounce(muts => {
-    if (mutationsOnlyRipple(muts) || userIsSelectingText() || typingInsideActiveElement(muts)) {
-      return;
+    
+    // Final fallback - show original text with error styling
+    if (element) {
+      const fallbackElement = customParser.renderFallback(tex, displayMode);
+      element.innerHTML = '';
+      element.appendChild(fallbackElement);
+      element.classList.add('webtex-error-fallback');
     }
-
-    muts.flatMap(m => [...m.addedNodes])
-        .filter(n => n.nodeType === 1 && !n.closest('.webtex-ignore'))
-        .forEach(safeRender);
-  }, 200));
-  observer.observe(document.body, { childList:true, subtree:true });
-}
-
-function disableRendering() {
-  if (observer) {
-    observer.disconnect();
-    observer = null;
-  }
-  
-  // Use MathJax's API to clear the rendered math
-  if (window.MathJax && window.MathJax.typesetClear) {
-    window.MathJax.typesetClear();
+    
+    return { success: false, method: 'error', element: element };
   }
 }
 
-/* ---------- core ---------- */
+/* -------------------------------------------------- */
+// Enhanced math detection and processing
+function findMathExpressions(root) {
+  const mathExpressions = [];
+  const walker = document.createTreeWalker(
+    root,
+    NodeFilter.SHOW_TEXT,
+    {
+      acceptNode: function(node) {
+        // Skip if parent is already processed or should be ignored
+        if (node.parentElement && (
+          node.parentElement.classList.contains('webtex-processed') ||
+          node.parentElement.classList.contains('webtex-ignore') ||
+          node.parentElement.closest('.webtex-ignore')
+        )) {
+          return NodeFilter.FILTER_REJECT;
+        }
+        return NodeFilter.FILTER_ACCEPT;
+      }
+    }
+  );
 
+  let node;
+  while (node = walker.nextNode()) {
+    const text = node.textContent;
+    
+    // Enhanced regex patterns for math detection
+    const patterns = [
+      // Display math
+      { pattern: /\$\$([\s\S]*?)\$\$/g, display: true },
+      { pattern: /\\\[([\s\S]*?)\\\]/g, display: true },
+      // Inline math
+      { pattern: /\$([^\$\n]+?)\$/g, display: false },
+      { pattern: /\\\(([\s\S]*?)\\\)/g, display: false }
+    ];
+
+    patterns.forEach(({ pattern, display }) => {
+      let match;
+      while ((match = pattern.exec(text)) !== null) {
+        const tex = decodeHTMLEntities(match[1].trim());
+        if (tex) {
+          mathExpressions.push({
+            tex: tex,
+            display: display,
+            node: node,
+            match: match[0],
+            start: match.index,
+            end: match.index + match[0].length
+          });
+        }
+      }
+    });
+  }
+
+  return mathExpressions;
+}
+
+/* -------------------------------------------------- */
+// Process math expressions with intelligent fallback
+async function processMathExpressions(expressions) {
+  const processedNodes = new Set();
+  
+  for (const expr of expressions) {
+    if (processedNodes.has(expr.node)) continue;
+    
+    const text = expr.node.textContent;
+    const container = document.createElement('span');
+    container.className = 'webtex-math-container';
+    
+    // Replace the math expression with a container
+    const before = text.substring(0, expr.start);
+    const after = text.substring(expr.end);
+    
+    if (before) {
+      container.appendChild(document.createTextNode(before));
+    }
+    
+    const mathElement = document.createElement('span');
+    mathElement.className = `webtex-math ${expr.display ? 'webtex-display' : 'webtex-inline'}`;
+    
+    const result = await renderMathExpression(expr.tex, expr.display, mathElement);
+    
+    if (result.success) {
+      container.appendChild(mathElement);
+    } else {
+      // Keep original text if all renderers failed
+      container.appendChild(document.createTextNode(expr.match));
+    }
+    
+    if (after) {
+      container.appendChild(document.createTextNode(after));
+    }
+    
+    expr.node.parentNode.replaceChild(container, expr.node);
+    processedNodes.add(expr.node);
+  }
+}
+
+/* -------------------------------------------------- */
+// Enhanced preprocessing
 function preprocessMathText(node) {
   if (!node || !node.childNodes) return;
+  
   node.childNodes.forEach(child => {
     if (child.nodeType === 3) { // Text node
       let text = child.textContent;
-      
       text = decodeHTMLEntities(text);
       
-      // Special handling for environments that should be display math
+      // Enhanced environment handling
       text = text.replace(/\$\s*\\begin\{([^}]+)\}([\s\S]*?)\\end\{\1\}\s*\$/g, (m, env, content) => {
         const decodedContent = decodeHTMLEntities(content);
         return '$$\\begin{' + env + '}' + decodedContent + '\\end{' + env + '}$$';
@@ -170,54 +328,158 @@ function preprocessMathText(node) {
   });
 }
 
-function safeRender (root = document.body) {
-    if (!isEnabled || !mathjaxLoaded) {
-        return;
+/* -------------------------------------------------- */
+// Main rendering function
+async function safeRender(root = document.body) {
+  if (!isEnabled) return;
+  
+  try {
+    preprocessMathText(root);
+    
+    const expressions = findMathExpressions(root);
+    if (expressions.length > 0) {
+      await processMathExpressions(expressions);
+      
+      // Log rendering statistics
+      console.log('WebTeX: Rendering complete', {
+        total: rendererState.totalAttempts,
+        katex: rendererState.katexSuccess,
+        mathjax: rendererState.mathjaxFallback,
+        custom: rendererState.customParserFallback,
+        successRate: ((rendererState.katexSuccess + rendererState.mathjaxFallback + rendererState.customParserFallback) / rendererState.totalAttempts * 100).toFixed(1) + '%'
+      });
     }
-    try {
-        preprocessMathText(root);
-        
-        // Find all math in the document and render it
-        window.MathJax.typesetPromise([root]).catch(err => {
-            console.warn('WebTeX: MathJax rendering error:', err);
-        });
-    } catch (e) {
-        console.error('WebTeX: Error during rendering', e);
-    }
+  } catch (e) {
+    console.error('WebTeX: Error during rendering', e);
+  }
 }
 
+/* -------------------------------------------------- */
+// Main initialization
+(async function main() {
+  const { allowedDomains = [] } = await chrome.storage.local.get("allowedDomains");
+  
+  const isLocalFile = location.protocol === 'file:';
+  const isDomainAllowed = allowedDomains.includes(location.hostname);
+  
+  isEnabled = isLocalFile || isDomainAllowed;
+  
+  if (isEnabled) {
+    enableRendering();
+  }
 
-/* ---------- helpers ---------- */
+  // Listen for domain updates
+  chrome.runtime.onMessage.addListener(msg => {
+    if (msg.action === "domain-updated" && msg.allowed) {
+      const newIsEnabled = location.protocol === 'file:' || msg.allowed.includes(location.hostname);
+      
+      if (newIsEnabled && !isEnabled) {
+        isEnabled = true;
+        enableRendering();
+        setupNavigationHandlers();
+      } else if (!newIsEnabled && isEnabled) {
+        isEnabled = false;
+        disableRendering();
+      }
+    }
+  });
 
-function nodeIsEditable (n) {
+  setupNavigationHandlers();
+})();
+
+/* -------------------------------------------------- */
+// Navigation and observer setup
+let navigationHandlersSetup = false;
+
+function setupNavigationHandlers() {
+  if (!isEnabled || navigationHandlersSetup) return;
+  
+  navigationHandlersSetup = true;
+  let lastUrl = location.href;
+  
+  const debouncedNavigationHandler = debounce(handleNavigation, 100);
+
+  const navigationObserver = new MutationObserver(() => {
+    if (location.href !== lastUrl) {
+      lastUrl = location.href;
+      debouncedNavigationHandler();
+    }
+  });
+
+  navigationObserver.observe(document.body, { childList: true, subtree: true });
+  window.addEventListener('popstate', debouncedNavigationHandler);
+}
+
+function handleNavigation() {
+  if (!isEnabled) return;
+  console.debug('WebTeX: Detected navigation, re-rendering math');
+  safeRender();
+}
+
+function enableRendering() {
+  safeRender();
+
+  observer = new MutationObserver(debounce(muts => {
+    if (mutationsOnlyRipple(muts) || userIsSelectingText() || typingInsideActiveElement(muts)) {
+      return;
+    }
+
+    muts.flatMap(m => [...m.addedNodes])
+        .filter(n => n.nodeType === 1 && !n.closest('.webtex-ignore'))
+        .forEach(safeRender);
+  }, 200));
+  
+  observer.observe(document.body, { childList: true, subtree: true });
+}
+
+function disableRendering() {
+  if (observer) {
+    observer.disconnect();
+    observer = null;
+  }
+  
+  if (window.MathJax && window.MathJax.typesetClear) {
+    window.MathJax.typesetClear();
+  }
+  
+  // Clear KaTeX rendered elements
+  document.querySelectorAll('.webtex-katex-rendered, .webtex-mathjax-rendered, .webtex-custom-rendered').forEach(el => {
+    el.classList.remove('webtex-katex-rendered', 'webtex-mathjax-rendered', 'webtex-custom-rendered');
+  });
+}
+
+/* -------------------------------------------------- */
+// Helper functions
+function nodeIsEditable(n) {
   if (n.getAttribute && n.getAttribute('contenteditable') === 'false') return false;
   return n.isContentEditable || (n.nodeType === 1 && /^(INPUT|TEXTAREA|SELECT)$/.test(n.tagName));
 }
 
-function typingInsideActiveElement (muts) {
+function typingInsideActiveElement(muts) {
   const active = document.activeElement;
   if (!active || !nodeIsEditable(active)) return false;
   return muts.every(m => active.contains(m.target));
 }
 
-function userIsSelectingText () {
+function userIsSelectingText() {
   const sel = document.getSelection();
   return sel && sel.rangeCount > 0 && !sel.isCollapsed;
 }
 
-function isRippleNode (n) {
+function isRippleNode(n) {
   return n.nodeType === 1 && n.classList && (
     n.classList.contains("mat-ripple") ||
     n.classList.contains("mdc-button__ripple") ||
     n.classList.contains("mat-focus-indicator")
   );
 }
-function mutationsOnlyRipple (muts) {
+
+function mutationsOnlyRipple(muts) {
   return muts.every(m =>
     [...m.addedNodes, ...m.removedNodes].every(isRippleNode)
   );
 }
 
-function debounce (fn, ms) {
+function debounce(fn, ms) {
   let t; return (...a) => { clearTimeout(t); t = setTimeout(() => fn(...a), ms); };
 }
