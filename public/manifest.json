@@ -21,6 +21,12 @@
     "type": "module"
   },
 
+  "web_accessible_resources": [
+    {
+      "resources": ["mathjax/tex-chtml-full.js"],
+      "matches": ["<all_urls>"]
+    }
+  ],
   "content_scripts": [
     {
       "matches": ["<all_urls>"],
