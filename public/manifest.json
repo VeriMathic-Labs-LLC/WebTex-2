@@ -24,9 +24,14 @@
   "content_scripts": [
     {
       "matches": ["<all_urls>"],
-      "js": ["app.js"],
-      "css": ["app.css"],
+      "js": ["render-mathjax.js"],
       "run_at": "document_idle"
+    }
+  ],
+  "web_accessible_resources": [
+    {
+      "resources": ["mathjax/tex-svg.js"],
+      "matches": ["<all_urls>"]
     }
   ],
   "chrome_url_overrides": {
