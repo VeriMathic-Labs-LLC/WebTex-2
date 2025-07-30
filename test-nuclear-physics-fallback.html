@@ -1,0 +1,128 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>WebTeX Nuclear Physics Fallback Test</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            max-width: 800px;
+            margin: 0 auto;
+            padding: 20px;
+            line-height: 1.6;
+        }
+        .test-section {
+            margin: 30px 0;
+            padding: 20px;
+            border: 1px solid #ddd;
+            border-radius: 8px;
+        }
+        .test-section h3 {
+            margin-top: 0;
+            color: #333;
+        }
+        .math-example {
+            background: #f9f9f9;
+            padding: 15px;
+            margin: 15px 0;
+            border-left: 4px solid #007cba;
+        }
+        .description {
+            color: #666;
+            font-size: 0.9em;
+            margin-bottom: 10px;
+        }
+        .expected {
+            background: #e8f5e8;
+            padding: 10px;
+            margin: 10px 0;
+            border-left: 4px solid #4caf50;
+        }
+    </style>
+</head>
+<body>
+    <h1>WebTeX Nuclear Physics Fallback Test</h1>
+    <p>This page tests the fallback system for nuclear physics notation that KaTeX struggles with. The extension should automatically detect these patterns and use the custom renderer.</p>
+
+    <div class="test-section">
+        <h3>Nuclear Physics Notation (KaTeX Problematic)</h3>
+        <div class="description">These expressions cause KaTeX parsing errors and should trigger the fallback to custom renderer.</div>
+        
+        <div class="math-example">
+            <strong>Nuclear notation with text commands:</strong><br>
+            $\text{_Z^A X}$ - Basic nuclear notation<br>
+            $\text{_88^226 Ra} \to \text{_86^222 Rn} + \text{_2^4 He}$ - Alpha decay<br>
+            $\text{_6^14 C} \to \text{_7^14 N} + \text{e^-} + \bar{\nu}$ - Beta decay
+        </div>
+        
+        <div class="expected">
+            <strong>Expected:</strong> These should render with subscripts and superscripts, not cause KaTeX errors.
+        </div>
+    </div>
+
+    <div class="test-section">
+        <h3>Complex Nuclear Reactions</h3>
+        <div class="description">More complex nuclear physics expressions that should work with the custom renderer.</div>
+        
+        <div class="math-example">
+            <strong>Nuclear reactions:</strong><br>
+            $\text{Z^A N} \to \text{{Z-2}^{A-4} N'} + \text{_2^4 He}$ - General alpha decay<br>
+            $\text{Z^A N} \to \text{{Z+1}^{A} N'} + \text{e^-} + \bar{\nu}$ - Beta minus decay<br>
+            $\text{Z^A N} \to \text{{Z-1}^{A} N'} + \text{e^+} + \nu$ - Beta plus decay
+        </div>
+        
+        <div class="math-example">
+            <strong>Specific examples:</strong><br>
+            $\text{_10^19 Ne} \to \text{_9^19 F} + \text{e^+} + \nu$ - Positron emission<br>
+            $\text{Z^A N} + \text{e^-} \to \text{{Z-1}^{A} N'} + \nu$ - Electron capture<br>
+            $\text{_Z^A N*} \to \text{_Z^A N} + \gamma$ - Gamma decay
+        </div>
+    </div>
+
+    <div class="test-section">
+        <h3>Mixed Content Test</h3>
+        <div class="description">Testing nuclear physics content mixed with regular math that KaTeX can handle.</div>
+        
+        <div class="math-example">
+            <strong>Mixed expressions:</strong><br>
+            The energy of a photon is $E = h\nu$ where $h$ is Planck's constant.<br>
+            For nuclear decay: $\text{_Z^A N} \to \text{_Z^A N} + \gamma$ with energy $E = mc^2$<br>
+            The decay constant is $\lambda = \frac{\ln(2)}{T_{1/2}}$ where $T_{1/2}$ is the half-life.
+        </div>
+        
+        <div class="expected">
+            <strong>Expected:</strong> Regular math should render with KaTeX, nuclear notation with custom renderer.
+        </div>
+    </div>
+
+    <div class="test-section">
+        <h3>Console Output Check</h3>
+        <div class="description">Check the browser console for these messages:</div>
+        <div class="expected">
+            <ul>
+                <li>"Nuclear physics content detected, will use custom renderer"</li>
+                <li>"Using custom renderer for nuclear physics content"</li>
+                <li>No KaTeX error messages for the nuclear notation</li>
+            </ul>
+        </div>
+    </div>
+
+    <script>
+        // Add some dynamic content to test SPA-like behavior
+        setTimeout(() => {
+            const newSection = document.createElement('div');
+            newSection.className = 'test-section';
+            newSection.innerHTML = `
+                <h3>Dynamically Added Nuclear Content</h3>
+                <div class="description">This section was added dynamically to test SPA navigation detection with nuclear physics content.</div>
+                <div class="math-example">
+                    <strong>Dynamic nuclear notation:</strong><br>
+                    $\text{_92^235 U} + \text{_0^1 n} \to \text{_56^141 Ba} + \text{_36^92 Kr} + 3\text{_0^1 n}$ - Nuclear fission
+                </div>
+            `;
+            document.body.appendChild(newSection);
+        }, 2000);
+    </script>
+</body>
+</html> 
