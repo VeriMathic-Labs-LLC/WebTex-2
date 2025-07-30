@@ -1,0 +1,2 @@
+(()=>{"use strict";chrome.runtime.onMessage.addListener((e,s,a)=>{if("GREETINGS"===e.type){const s="Hi Ove, my name is Bac. I am from Background. It's great to hear from you.";console.log(e.payload.message),a({message:s})}})})();
+//# sourceMappingURL=background.js.map

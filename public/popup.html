@@ -1,0 +1,27 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>WebTex Toggle</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <style>
+    body { margin:0; padding:0; font-family: system-ui, sans-serif; background: #f7f7fa; }
+    .container { max-width: 320px; margin: 0 auto; padding: 30px 24px; background: #fff; border-radius: 10px; box-shadow: 0 2px 12px rgba(0,0,0,0.07); }
+    h1 { font-size: 1.3em; margin-bottom: 1em; }
+    .toggle { display: flex; align-items: center; }
+    .toggle input { margin-right: 10px; }
+    .desc { color: #666; font-size: 0.98em; margin-bottom: 1em; }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <h1>WebTex</h1>
+    <div class="desc">Toggle LaTeX rendering on or off for all sites.</div>
+    <div class="toggle">
+      <input type="checkbox" id="toggle" />
+      <label for="toggle">Enable MathJax</label>
+    </div>
+  </div>
+  <script src="popup.js"></script>
+</body>
+</html>

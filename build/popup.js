@@ -1,0 +1,1 @@
+const toggle=document.getElementById("toggle");chrome.storage.sync.get({webtexEnabled:!0},e=>{toggle.checked=!!e.webtexEnabled}),toggle.addEventListener("change",()=>{chrome.storage.sync.set({webtexEnabled:toggle.checked})});
