@@ -1,27 +1,32 @@
-<!DOCTYPE html>
-<html lang="en">
-<head>
-  <meta charset="UTF-8">
-  <title>WebTex Toggle</title>
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <style>
-    body { margin:0; padding:0; font-family: system-ui, sans-serif; background: #f7f7fa; }
-    .container { max-width: 320px; margin: 0 auto; padding: 30px 24px; background: #fff; border-radius: 10px; box-shadow: 0 2px 12px rgba(0,0,0,0.07); }
-    h1 { font-size: 1.3em; margin-bottom: 1em; }
-    .toggle { display: flex; align-items: center; }
-    .toggle input { margin-right: 10px; }
-    .desc { color: #666; font-size: 0.98em; margin-bottom: 1em; }
-  </style>
-</head>
-<body>
-  <div class="container">
-    <h1>WebTex</h1>
-    <div class="desc">Toggle LaTeX rendering on or off for all sites.</div>
-    <div class="toggle">
-      <input type="checkbox" id="toggle" />
-      <label for="toggle">Enable MathJax</label>
-    </div>
-  </div>
+<!doctype html>
+<html>
+  <head>
+    <meta charset="utf-8" />
+    <title>WebTeX</title>
+    <link rel="stylesheet" href="popup.css" />
+  </head>
+  <body>
+  <header>
+    <img src="icons/icon_48.png" alt="WebTeX icon" />
+    <h2>WebTeX</h2>
+  </header>
+
+  <section class="row">
+    <span id="domainName" class="domain">example.com</span>
+    <span id="siteStatus" class="chip">‑‑</span>
+    <label class="switch">
+      <input type="checkbox" id="siteToggle" />
+      <span class="slider"></span>
+    </label>
+    <span class="label">Enable WebTeX on this site</span>
+  </section>
+
+  <nav>
+    <a href="https://www.mathjax.org/" target="_blank">MathJax&nbsp;docs</a>
+    <a href="https://github.com/VeriMathic-Labs-LLC/WebTex" target="_blank">GitHub&nbsp;repo</a>
+    <a href="https://verimathiclabs.com/" target="_blank">VeriMathic&nbsp;Labs</a>
+  </nav>
+
   <script src="popup.js"></script>
-</body>
+  </body>
 </html>
