@@ -286,6 +286,12 @@ function preprocessMathText(node) {
         console.log('Nuclear physics content detected, will use custom renderer');
       }
       
+      // Check for fraction patterns that might cause font issues
+      if (/\\frac\{[^}]+\}\{[^}]+\}/.test(text)) {
+        hasNuclearPhysicsContent = true;
+        console.log('Fraction content detected, will use custom renderer to avoid font issues');
+      }
+      
       // Handle block math: $$...$$ and \[...\]
       // Keep original spacing for display math
       text = text.replace(/\$\$([\s\S]*?)\$\$/g, (m, inner) => {
@@ -387,9 +393,17 @@ function safeRender (root = document.body) {
             console.warn('KaTeX rendering error:', msg, err);
             katexErrorCount++;
             
-            // If we get multiple errors, switch to custom renderer
-            if (katexErrorCount > 2) {
-              console.log('Multiple KaTeX errors detected, switching to custom renderer');
+            // Check for font-related errors or multiple errors
+            const isFontError = msg && (
+              msg.includes('No character metrics') ||
+              msg.includes('font') ||
+              msg.includes('character') ||
+              msg.includes('metrics')
+            );
+            
+            // Switch to custom renderer immediately for font errors or after 2+ errors
+            if (isFontError || katexErrorCount > 2) {
+              console.log(`Switching to custom renderer due to ${isFontError ? 'font error' : 'multiple errors'}`);
               useKatex = false;
               // Clear any KaTeX elements and re-render
               setTimeout(() => {

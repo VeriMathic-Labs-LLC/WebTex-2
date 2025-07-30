@@ -338,6 +338,23 @@ class LatexRenderer {
         { pattern: /\\text\{MeV\}/g, replacement: 'MeV' },
         { pattern: /\\text\{c\}/g, replacement: 'c' },
         
+        // Special characters that might cause font issues
+        { pattern: /\\frac\{1\}\{2\}/g, replacement: '½' },
+        { pattern: /\\frac\{1\}\{3\}/g, replacement: '⅓' },
+        { pattern: /\\frac\{2\}\{3\}/g, replacement: '⅔' },
+        { pattern: /\\frac\{1\}\{4\}/g, replacement: '¼' },
+        { pattern: /\\frac\{3\}\{4\}/g, replacement: '¾' },
+        { pattern: /\\frac\{1\}\{5\}/g, replacement: '⅕' },
+        { pattern: /\\frac\{2\}\{5\}/g, replacement: '⅖' },
+        { pattern: /\\frac\{3\}\{5\}/g, replacement: '⅗' },
+        { pattern: /\\frac\{4\}\{5\}/g, replacement: '⅘' },
+        { pattern: /\\frac\{1\}\{6\}/g, replacement: '⅙' },
+        { pattern: /\\frac\{5\}\{6\}/g, replacement: '⅚' },
+        { pattern: /\\frac\{1\}\{8\}/g, replacement: '⅛' },
+        { pattern: /\\frac\{3\}\{8\}/g, replacement: '⅜' },
+        { pattern: /\\frac\{5\}\{8\}/g, replacement: '⅝' },
+        { pattern: /\\frac\{7\}\{8\}/g, replacement: '⅞' },
+        
         // Remove remaining LaTeX commands that we don't handle
         { pattern: /\\[a-zA-Z]+\{[^}]*\}/g, replacement: '' },
         { pattern: /\\[a-zA-Z]+/g, replacement: '' }
