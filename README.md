@@ -1,11 +1,11 @@
 # <img src="public/icons/icon_48.png" width="45" align="left"> Webtex
 
-My Chrome Extension
+Renders LaTeX on any page using a bundled MathJax engine.
 
 ## Features
 
-- Feature 1
-- Feature 2
+- Automatically injects MathJax on every page
+- No external CDN required
 
 ## Install
 

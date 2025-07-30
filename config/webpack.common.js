@@ -55,6 +55,11 @@ const common = {
           from: '**/*',
           context: 'public',
         },
+        {
+          from: '**/*',
+          context: 'node_modules/mathjax/es5',
+          to: 'mathjax'
+        }
       ]
     }),
     // Extract CSS into separate files
