@@ -8,6 +8,32 @@
 }
 /* normalize css ends here */
 
-@media (prefers-color-scheme: dark){
-  .MathJax{color:#eee!important}
+/* WebTeX LaTeX.js styles */
+.webtex-inline-math {
+  display: inline;
+  vertical-align: middle;
+}
+
+.webtex-display-math {
+  display: block;
+  text-align: center;
+  margin: 1em 0;
+}
+
+.webtex-processed {
+  display: inline;
+}
+
+/* Dark mode support for LaTeX.js */
+@media (prefers-color-scheme: dark) {
+  .webtex-inline-math,
+  .webtex-display-math {
+    color: #eee !important;
+  }
+  
+  /* Ensure LaTeX.js elements inherit dark mode colors */
+  .webtex-inline-math *,
+  .webtex-display-math * {
+    color: inherit !important;
+  }
 } 

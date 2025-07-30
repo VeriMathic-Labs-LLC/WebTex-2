@@ -50,6 +50,12 @@ module.exports = {
           to:   '.',
           noErrorOnMissing: true,
           force: false          // <‑‑ prevents overwrite
+        },
+        {
+          from: 'node_modules/katex/dist',
+          to: 'katex',
+          noErrorOnMissing: true,
+          force: false
         }
       ],
       options: { concurrency: 8 }
