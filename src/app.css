@@ -8,66 +8,106 @@
 }
 /* normalize css ends here */
 
-/* WebTeX LaTeX.js styles */
+/* WebTeX Enhanced Styling */
+.webtex-math-container {
+  display: inline;
+}
+
+.webtex-math {
+  display: inline-block;
+}
+
+.webtex-display {
+  display: block;
+  text-align: center;
+  margin: 1em 0;
+}
+
 .webtex-inline-math {
   display: inline;
   vertical-align: middle;
-  color: #000 !important;
+  color: inherit !important;
 }
 
 .webtex-display-math {
   display: block;
   text-align: center;
   margin: 1em 0;
-  color: #000 !important;
+  color: inherit !important;
 }
 
 .webtex-processed {
   display: inline;
-  color: #000 !important;
+  color: inherit !important;
 }
 
-/* KaTeX styles for better visibility */
+/* KaTeX styling that adapts to website color scheme */
 .katex {
-  color: #000 !important;
+  color: inherit !important;
   font-size: 1.1em;
 }
 
 .katex-display {
-  color: #000 !important;
+  color: inherit !important;
   margin: 1em 0;
 }
 
 .katex .katex-html {
-  color: #000 !important;
+  color: inherit !important;
 }
 
 .katex .katex-mathml {
-  color: #000 !important;
+  color: inherit !important;
 }
 
-/* Ensure all KaTeX elements have proper contrast */
+/* Ensure all KaTeX elements inherit color */
 .katex,
 .katex *,
 .katex .katex-html *,
 .katex .katex-mathml * {
-  color: #000 !important;
+  color: inherit !important;
 }
 
-/* Dark mode support */
-@media (prefers-color-scheme: dark) {
-  .katex,
-  .katex *,
-  .katex .katex-html *,
-  .katex .katex-mathml *,
-  .webtex-inline-math,
-  .webtex-display-math,
-  .webtex-processed {
-    color: #fff !important;
-  }
+/* MathJax styling that adapts to website color scheme */
+.MathJax {
+  color: inherit !important;
 }
 
-/* Force contrast for specific KaTeX elements */
+.MathJax .MathJax_CHTML {
+  color: inherit !important;
+}
+
+/* Custom fallback styling */
+.webtex-custom-fallback {
+  font-family: 'Computer Modern', 'Times New Roman', serif;
+  font-size: 1.1em;
+  color: inherit !important;
+  background: rgba(255, 235, 238, 0.3);
+  padding: 2px 4px;
+  border-radius: 3px;
+  border: 1px solid rgba(239, 154, 154, 0.5);
+}
+
+/* Error fallback styling */
+.webtex-error-fallback {
+  font-family: 'Courier New', monospace;
+  font-size: 0.9em;
+  color: inherit !important;
+  background: rgba(255, 235, 238, 0.3);
+  padding: 2px 4px;
+  border-radius: 3px;
+  border: 1px solid rgba(239, 154, 154, 0.5);
+  margin: 0 2px;
+}
+
+/* Force color inheritance for all math elements */
+.webtex-katex-rendered,
+.webtex-mathjax-rendered,
+.webtex-custom-rendered {
+  color: inherit !important;
+}
+
+/* Ensure proper contrast on different backgrounds */
 .katex .katex-html .base,
 .katex .katex-html .strut,
 .katex .katex-html .mord,
@@ -77,6 +117,20 @@
 .katex .katex-html .mclose,
 .katex .katex-html .mpunct,
 .katex .katex-html .minner,
-.katex .katex-html .mop {
+.katex .katex-html .mop,
+.katex .katex-html .text,
+.katex .katex-html .mathnormal,
+.katex .katex-html .mathit,
+.katex .katex-html .mathrm,
+.katex .katex-html .mathbf,
+.katex .katex-html .boldsymbol,
+.katex .katex-html .amsrm,
+.katex .katex-html .mathbb,
+.katex .katex-html .mathcal,
+.katex .katex-html .mathfrak,
+.katex .katex-html .mathscr,
+.katex .katex-html .mathsf,
+.katex .katex-html .mathds,
+.katex .katex-html .mathdefault {
   color: inherit !important;
 } 

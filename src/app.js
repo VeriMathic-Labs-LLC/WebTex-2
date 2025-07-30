@@ -27,6 +27,9 @@ let rendererState = {
   totalAttempts: 0
 };
 
+// Expose renderer state globally for debugging
+window.rendererState = rendererState;
+
 // Enhanced MathJax configuration
 window.MathJax = {
   tex: {
@@ -134,20 +137,34 @@ async function renderMathExpression(tex, displayMode = false, element = null) {
   
   // Try KaTeX first
   try {
+    // Preprocess the LaTeX to handle Unicode characters
+    const processedTex = handleUnicodeInMath(tex);
+    
     const katexOptions = {
       displayMode: displayMode,
       throwOnError: false,
       errorColor: '#cc0000',
+      strict: false, // Disable strict mode to reduce warnings
+      trust: true, // Trust input to allow more features
       macros: {
         "\\RR": "\\mathbb{R}",
         "\\NN": "\\mathbb{N}",
         "\\ZZ": "\\mathbb{Z}",
         "\\QQ": "\\mathbb{Q}",
-        "\\CC": "\\mathbb{C}"
-      }
+        "\\CC": "\\mathbb{C}",
+        "\\half": "\\frac{1}{2}",
+        "\\quarter": "\\frac{1}{4}",
+        "\\third": "\\frac{1}{3}",
+        "\\twothirds": "\\frac{2}{3}",
+        "\\threequarters": "\\frac{3}{4}"
+      },
+      // Handle Unicode characters better
+      minRuleThickness: 0.05,
+      maxSize: 1000,
+      maxExpand: 1000
     };
     
-    const rendered = katex.renderToString(tex, katexOptions);
+    const rendered = katex.renderToString(processedTex, katexOptions);
     rendererState.katexSuccess++;
     
     if (element) {
@@ -181,7 +198,8 @@ async function renderMathExpression(tex, displayMode = false, element = null) {
     if (customParser.canHandle(tex)) {
       try {
         const simplified = customParser.simplify(tex);
-        const rendered = katex.renderToString(simplified, { displayMode, throwOnError: false });
+        const processedSimplified = handleUnicodeInMath(simplified);
+        const rendered = katex.renderToString(processedSimplified, { displayMode, throwOnError: false });
         
         if (element) {
           element.innerHTML = rendered;
@@ -306,7 +324,7 @@ async function processMathExpressions(expressions) {
 }
 
 /* -------------------------------------------------- */
-// Enhanced preprocessing
+// Enhanced preprocessing with Unicode handling
 function preprocessMathText(node) {
   if (!node || !node.childNodes) return;
   
@@ -326,6 +344,52 @@ function preprocessMathText(node) {
       preprocessMathText(child);
     }
   });
+}
+
+// Function to handle Unicode characters in math expressions
+function handleUnicodeInMath(tex) {
+  // Common Unicode fractions
+  const unicodeFractions = {
+    '½': '\\frac{1}{2}',
+    '⅓': '\\frac{1}{3}',
+    '⅔': '\\frac{2}{3}',
+    '¼': '\\frac{1}{4}',
+    '¾': '\\frac{3}{4}',
+    '⅕': '\\frac{1}{5}',
+    '⅖': '\\frac{2}{5}',
+    '⅗': '\\frac{3}{5}',
+    '⅘': '\\frac{4}{5}',
+    '⅙': '\\frac{1}{6}',
+    '⅚': '\\frac{5}{6}',
+    '⅐': '\\frac{1}{7}',
+    '⅛': '\\frac{1}{8}',
+    '⅜': '\\frac{3}{8}',
+    '⅝': '\\frac{5}{8}',
+    '⅞': '\\frac{7}{8}',
+    '⅑': '\\frac{1}{9}',
+    '⅒': '\\frac{1}{10}'
+  };
+  
+  let processed = tex;
+  
+  // Replace Unicode fractions with LaTeX fractions
+  Object.entries(unicodeFractions).forEach(([unicode, latex]) => {
+    processed = processed.replace(new RegExp(unicode, 'g'), latex);
+  });
+  
+  // Handle other Unicode characters by wrapping them in \text{}
+  // This regex matches Unicode characters that are not already in \text{} or other commands
+  processed = processed.replace(/([^\u0000-\u007F])/g, (match, char) => {
+    // Skip if already in \text{} or other commands
+    if (processed.includes(`\\text{${char}}`) || 
+        processed.includes(`\\mathrm{${char}}`) ||
+        processed.includes(`\\mathit{${char}}`)) {
+      return char;
+    }
+    return `\\text{${char}}`;
+  });
+  
+  return processed;
 }
 
 /* -------------------------------------------------- */
