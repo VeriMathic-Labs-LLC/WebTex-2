@@ -56,75 +56,65 @@ window.MathJax = {
   }
 };
 
-// Load MathJax for fallback
-const script = document.createElement('script');
-script.type = 'text/javascript';
-script.src = chrome.runtime.getURL('mathjax/es5/tex-chtml-full.js');
-script.async = true;
-document.head.appendChild(script);
+// MathJax removed – KaTeX-only build
 
 /* -------------------------------------------------- */
 // Custom LaTeX Parser for edge cases
 class CustomLatexParser {
-  constructor() {
-    this.supportedEnvironments = [
-      'matrix', 'pmatrix', 'bmatrix', 'vmatrix', 'Vmatrix',
-      'array', 'align', 'aligned', 'gather', 'gathered',
-      'cases', 'split', 'multline', 'eqnarray'
-    ];
-  }
-
-  // Check if expression can be handled by custom parser
+  /* Quick heuristic: does this expression likely need preprocessing? */
   canHandle(tex) {
-    // Handle basic matrix operations
-    if (tex.includes('\\begin{matrix}') || tex.includes('\\begin{pmatrix}')) {
-      return true;
-    }
-    
-    // Handle basic alignments
-    if (tex.includes('\\begin{align}') || tex.includes('\\begin{aligned}')) {
-      return true;
-    }
-    
-    // Handle basic cases
-    if (tex.includes('\\begin{cases}')) {
-      return true;
-    }
-    
-    return false;
+    return /\\text\{[^}]*(_\d+\^\d+|\^\d+_\d+|rac|\\begin\{(?:equation|align)\})/u.test(tex);
   }
 
-  // Convert to simplified LaTeX that KaTeX can handle
+  /* Main entry converting unsupported constructs into KaTeX-friendly ones */
   simplify(tex) {
-    let simplified = tex;
-    
-    // Replace problematic environments with simpler alternatives
-    simplified = simplified.replace(/\\begin\{align\}/g, '\\begin{aligned}');
-    simplified = simplified.replace(/\\end\{align\}/g, '\\end{aligned}');
-    
-    // Handle matrix environments
-    simplified = simplified.replace(/\\begin\{matrix\}/g, '\\begin{array}');
-    simplified = simplified.replace(/\\end\{matrix\}/g, '\\end{array}');
-    
-    return simplified;
+    let t = this.stripControlChars(tex);
+    t = this.processFractionNotation(t);
+    t = this.processNuclearNotation(t);
+    t = this.processEquationEnvironments(t);
+    t = this.processAlignEnvironment(t);
+    return t;
   }
 
-  // Create a simple fallback rendering
+  stripControlChars(str) {
+    return str.replace(/[\f\v\r]/g, '');
+  }
+
+  /* rac27 -> \frac{2}{7}, rac{1}{7} -> \frac{1}{7} */
+  processFractionNotation(str) {
+    // rac{num}{den}
+    str = str.replace(/(?:\\f?rac|rac)\{([^}]+)\}\{([^}]+)\}/g, '\\frac{$1}{$2}');
+    // rac27 pattern
+    str = str.replace(/(?:\\f?rac|rac)(\d)(\d+)/g, (_, a, b) => `\\frac{${a}}{${b}}`);
+    return str;
+  }
+
+  /* Converts nuclear notation inside \text{} into proper super/sub scripts */
+  processNuclearNotation(str) {
+    // pattern _Z^A Symbol
+    str = str.replace(/\\text\{_?(\d+)\^(\d+)\s+([^}]+)\}/g, (_, Z, A, sym) => `{ }^{${A}}_{${Z}}\\text{${sym}}`);
+    // pattern ^A_Z Symbol
+    str = str.replace(/\\text\{\^\{(\d+)\}_\{(\d+)\}\s*([^}]+)\}/g, (_, A, Z, sym) => `{ }^{${A}}_{${Z}}\\text{${sym}}`);
+    return str;
+  }
+
+  /* Strip equation environment wrappers */
+  processEquationEnvironments(str) {
+    return str.replace(/\\begin\{equation\}([\s\S]*?)\\end\{equation\}/g, '$1');
+  }
+
+  /* Replace align with aligned */
+  processAlignEnvironment(str) {
+    return str.replace(/\\begin\{align\}([\s\S]*?)\\end\{align\}/g, '\\begin{aligned}$1\\end{aligned}');
+  }
+
+  /* Fallback render as plain text */
   renderFallback(tex, displayMode = false) {
-    const container = document.createElement('span');
-    container.className = 'webtex-custom-fallback';
-    container.style.cssText = `
-      display: ${displayMode ? 'block' : 'inline-block'};
-      font-family: 'Computer Modern', serif;
-      font-size: 1.1em;
-      color: #d32f2f;
-      background: #ffebee;
-      padding: 2px 4px;
-      border-radius: 3px;
-      border: 1px solid #ef9a9a;
-    `;
-    container.textContent = tex;
-    return container;
+    const span = document.createElement('span');
+    span.className = 'webtex-custom-fallback';
+    span.textContent = tex;
+    span.style.display = displayMode ? 'block' : 'inline-block';
+    return span;
   }
 }
 
@@ -143,7 +133,7 @@ async function renderMathExpression(tex, displayMode = false, element = null) {
     const katexOptions = {
       displayMode: displayMode,
       throwOnError: false,
-      errorColor: '#cc0000',
+      errorColor: 'inherit',
       strict: false, // Disable strict mode to reduce warnings
       trust: true, // Trust input to allow more features
       macros: {
@@ -156,7 +146,9 @@ async function renderMathExpression(tex, displayMode = false, element = null) {
         "\\quarter": "\\frac{1}{4}",
         "\\third": "\\frac{1}{3}",
         "\\twothirds": "\\frac{2}{3}",
-        "\\threequarters": "\\frac{3}{4}"
+        "\\threequarters": "\\frac{3}{4}",
+        "\\to": "\\rightarrow",
+        "\\rac": "\\frac"
       },
       // Handle Unicode characters better
       minRuleThickness: 0.05,
@@ -376,6 +368,13 @@ function handleUnicodeInMath(tex) {
   Object.entries(unicodeFractions).forEach(([unicode, latex]) => {
     processed = processed.replace(new RegExp(unicode, 'g'), latex);
   });
+
+  // Common Unicode math symbols
+  processed = processed.replace(/→/g, '\\rightarrow');
+  processed = processed.replace(/∈/g, '\\in');
+  processed = processed.replace(/⊆/g, '\\subseteq');
+  processed = processed.replace(/ν/g, '\\nu');
+  processed = processed.replace(/γ/g, '\\gamma');
   
   // Handle other Unicode characters by wrapping them in \text{}
   // This regex matches Unicode characters that are not already in \text{} or other commands
@@ -502,13 +501,9 @@ function disableRendering() {
     observer = null;
   }
   
-  if (window.MathJax && window.MathJax.typesetClear) {
-    window.MathJax.typesetClear();
-  }
-  
   // Clear KaTeX rendered elements
-  document.querySelectorAll('.webtex-katex-rendered, .webtex-mathjax-rendered, .webtex-custom-rendered').forEach(el => {
-    el.classList.remove('webtex-katex-rendered', 'webtex-mathjax-rendered', 'webtex-custom-rendered');
+  document.querySelectorAll('.webtex-katex-rendered, .webtex-custom-rendered').forEach(el => {
+    el.classList.remove('webtex-katex-rendered', 'webtex-custom-rendered');
   });
 }
 
