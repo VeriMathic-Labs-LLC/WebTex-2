@@ -8,22 +8,19 @@
 }
 /* normalize css ends here */
 
-/* WebTeX Enhanced Styling with proper color inheritance */
+/* WebTeX Enhanced Styling */
 .webtex-math-container {
   display: inline;
-  color: inherit !important;
 }
 
 .webtex-math {
   display: inline-block;
-  color: inherit !important;
 }
 
 .webtex-display {
   display: block;
   text-align: center;
   margin: 1em 0;
-  color: inherit !important;
 }
 
 .webtex-inline-math {
@@ -71,6 +68,15 @@
   color: inherit !important;
 }
 
+/* MathJax styling that adapts to website color scheme */
+.MathJax {
+  color: inherit !important;
+}
+
+.MathJax .MathJax_CHTML {
+  color: inherit !important;
+}
+
 /* Custom fallback styling */
 .webtex-custom-fallback {
   font-family: 'Computer Modern', 'Times New Roman', serif;
@@ -94,15 +100,24 @@
   margin: 0 2px;
 }
 
-/* Ensure all rendered elements inherit color */
+/* Force color inheritance for all math elements */
 .webtex-katex-rendered,
+.webtex-mathjax-rendered,
 .webtex-custom-rendered {
   color: inherit !important;
 }
 
-/* Additional KaTeX color inheritance fixes */
+/* Ensure proper contrast on different backgrounds */
 .katex .katex-html .base,
 .katex .katex-html .strut,
+.katex .katex-html .mord,
+.katex .katex-html .mbin,
+.katex .katex-html .mrel,
+.katex .katex-html .mopen,
+.katex .katex-html .mclose,
+.katex .katex-html .mpunct,
+.katex .katex-html .minner,
+.katex .katex-html .mop,
 .katex .katex-html .text,
 .katex .katex-html .mathnormal,
 .katex .katex-html .mathit,
@@ -115,25 +130,7 @@
 .katex .katex-html .mathfrak,
 .katex .katex-html .mathscr,
 .katex .katex-html .mathsf,
-.katex .katex-html .mathtt {
-  color: inherit !important;
-}
-
-/* Dark mode specific adjustments */
-@media (prefers-color-scheme: dark) {
-  .katex {
-    color: inherit !important;
-  }
-  
-  .webtex-custom-fallback,
-  .webtex-error-fallback {
-    background: rgba(255, 235, 238, 0.1);
-    border-color: rgba(239, 154, 154, 0.3);
-  }
-}
-
-/* Force color inheritance for all math elements */
-.katex-display,
-.katex-display * {
+.katex .katex-html .mathds,
+.katex .katex-html .mathdefault {
   color: inherit !important;
 } 
