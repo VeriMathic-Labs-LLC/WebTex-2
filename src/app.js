@@ -336,6 +336,14 @@ class CustomLatexParser {
 
 	// Convert to simplified LaTeX that KaTeX can handle
 	simplify(tex) {
+		// Remove stray leading/trailing $ around environments (e.g. "$\\begin{pmatrix}")
+		if (/^\$\\begin\{/.test(tex)) {
+			tex = tex.replace(/^\$/, "");
+		}
+		if (/\\end\{[^}]+\}\$$/.test(tex)) {
+			tex = tex.replace(/\$$/, "");
+		}
+
 		let simplified = tex;
 
 		// First, fix any structural issues
@@ -419,6 +427,12 @@ class CustomLatexParser {
 				}
 				return `\\frac{${num}}{${den}}`;
 			},
+		);
+
+		// Fix missing braces around denominator like \frac{a}{b + c}d → wrap single token
+		str = str.replace(
+			/\\frac\{([^{}]+)\}([^{])/g,
+			(_m, num, following) => `\\frac{${num}}{${following}}`,
 		);
 
 		// rac{num}{den}
@@ -538,6 +552,9 @@ class CustomLatexParser {
 		// Fix missing braces in limits: \lim_{x o infty} -> \lim_{x \to \infty}
 		str = str.replace(/\\lim_\{([^}]*)\s+o\s+infty\}/g, "\\lim_{$1 \\to \\infty}");
 
+		// Auto-wrap bare ^ and _ arguments with braces
+		str = str.replace(/(\^|_)(?![{\\])\s*([A-Za-z0-9+-])/g, "$1{$2}");
+
 		// Fix unmatched braces in expressions
 		str = this.fixUnmatchedBraces(str);
 
@@ -616,67 +633,232 @@ class CustomLatexParser {
 
 const customParser = new CustomLatexParser();
 
-/* -------------------------------------------------- */
-// Utility: quick delimiter balance check
+// -------------------------------------------------- */
+// Enhanced delimiter balance check with LaTeX-specific handling
 function hasUnbalancedDelimiters(str) {
-	const pairs = { "{": "}", "(": ")", "[": "]" };
+	// Skip empty or very short strings
+	if (!str || str.length < 2) return false;
+
 	const stack = [];
-	for (const ch of str) {
-		if (pairs[ch]) {
-			stack.push(pairs[ch]);
-		} else if (Object.values(pairs).includes(ch)) {
-			if (stack.pop() !== ch) return true;
+	const pairs = {
+		"(": ")",
+		"[": "]",
+		"{": "}",
+		"\\left(": "\\right)",
+		"\\left[": "\\right]",
+		"\\left\\{": "\\right\\}",
+		"\\left.": "\\right.",
+		"\\left|": "\\right|",
+		"\\left\\|": "\\right\\|",
+		"\\left\\lfloor": "\\right\\rfloor",
+		"\\left\\lceil": "\\right\\rceil",
+		"\\left\\langle": "\\right\\rangle",
+	};
+
+	// Skip LaTeX commands and environments that might look like delimiters
+	const skipPatterns = [
+		/^\\(?:begin|end)\{/, // \begin{...} or \end{...}
+		/^\\[a-zA-Z]+/, // Any LaTeX command
+	];
+
+	// Skip over LaTeX commands and environments
+	const shouldSkip = (s, i) => {
+		if (s[i] !== "\\") return false;
+		return skipPatterns.some((pattern) => {
+			pattern.lastIndex = i;
+			return pattern.test(s);
+		});
+	};
+
+	// Check for \\left and \\right commands
+	const isLeftRightPair = (left, right) => {
+		if (left.startsWith("\\left") && right.startsWith("\\right")) {
+			const leftType = left.slice(5);
+			const rightType = right.slice(6);
+
+			// Handle special cases like \\left. and \\right.
+			if (leftType === "." || rightType === ".") return true;
+
+			// Check if they match (e.g., \\left( with \\right))
+			const leftChar = leftType[0];
+			const rightChar = rightType[0];
+
+			return (
+				leftChar === rightChar ||
+				(leftChar === "(" && rightChar === ")") ||
+				(leftChar === "[" && rightChar === "]") ||
+				(leftChar === "{" && rightChar === "}") ||
+				(leftChar === "<" && rightChar === ">")
+			);
+		}
+		return false;
+	};
+
+	// Main scanning loop
+	for (let i = 0; i < str.length; i++) {
+		// Skip LaTeX commands and environments
+		if (shouldSkip(str, i)) {
+			// Skip to the end of the command
+			while (i < str.length && /[a-zA-Z]/.test(str[i + 1])) i++;
+			continue;
+		}
+
+		const char = str[i];
+
+		// Check for \\left and \\right commands
+		if (str.startsWith("\\left", i)) {
+			// Find the end of the \\left command
+			const end = i + 5; // length of '\\left'
+			if (end < str.length) {
+				const delimiter = str[i + 5]; // The character after \\left
+				const fullCommand = `\\left${delimiter === "\\" ? "\\" : delimiter}`;
+				stack.push(fullCommand);
+				i = end + (delimiter === "\\" ? 1 : 0); // Skip past the delimiter
+				continue;
+			}
+		}
+
+		if (str.startsWith("\\right", i)) {
+			// Find the end of the \\right command
+			const end = i + 6; // length of '\\right'
+			if (end < str.length) {
+				const delimiter = str[i + 6]; // The character after \\right
+				const fullCommand = `\\right${delimiter === "\\" ? "\\" : delimiter}`;
+
+				if (stack.length === 0 || !isLeftRightPair(stack[stack.length - 1], fullCommand)) {
+					const unmatchedDelimiter = stack.length === 0 ? fullCommand : stack[stack.length - 1];
+					console.log(`Unmatched delimiter: ${unmatchedDelimiter}`);
+					return true; // Unmatched \\right
+				}
+				stack.pop();
+				i = end + (delimiter === "\\" ? 1 : 0); // Skip past the delimiter
+				continue;
+			}
+		}
+
+		// Handle regular delimiters
+		if (pairs[char]) {
+			stack.push(char);
+		} else if (char === ")" || char === "]" || char === "}") {
+			if (stack.length === 0 || pairs[stack.pop()] !== char) {
+				return true; // Unmatched closing delimiter
+			}
 		}
 	}
-	return stack.length !== 0;
+
+	// Check for unclosed environments
+	const envStack = [];
+	const envRegex = /\\(begin|end)\s*\{([^}]*)\}/g;
+	let match;
+
+	while ((match = envRegex.exec(str)) !== null) {
+		const [_, type, name] = match;
+		if (type === "begin") {
+			envStack.push(name);
+		} else if (type === "end") {
+			if (envStack.length === 0 || envStack[envStack.length - 1] !== name) {
+				return true; // Unmatched \\end
+			}
+			envStack.pop();
+		}
+	}
+
+	// If we get here, check if all delimiters and environments are closed
+	return stack.length > 0 || envStack.length > 0;
 }
 
 /* -------------------------------------------------- */
-// Enhanced rendering function with intelligent fallback
+// Enhanced rendering function with better error handling and fallback logic
 async function renderMathExpression(tex, displayMode = false, element = null) {
 	rendererState.totalAttempts++;
 
-	// Skip obviously malformed input to avoid KaTeX noise
-	if (hasUnbalancedDelimiters(tex)) {
+	// Skip empty or whitespace-only input
+	if (!tex || !tex.trim()) {
 		if (element) {
-			const fb = customParser.renderFallback(tex, displayMode);
+			element.textContent = tex || "";
+		}
+		return { success: false, method: "empty", element };
+	}
+
+	// Clean up the input
+	let cleanedTex = tex.trim();
+
+	// Handle display mode delimiters
+	const isDisplayMath =
+		displayMode ||
+		(cleanedTex.startsWith("$$") && cleanedTex.endsWith("$$")) ||
+		(cleanedTex.startsWith("\\[") && cleanedTex.endsWith("\\]"));
+
+	// Remove delimiters for processing
+	if (isDisplayMath) {
+		cleanedTex = cleanedTex
+			.replace(/^\$\$|\$\$$/g, "")
+			.replace(/^\\\[|\\\]$/g, "")
+			.trim();
+	}
+
+	// Handle common LaTeX newline issues
+	cleanedTex = cleanedTex.replace(/\\(?:newline|\\)\s*\n?/g, "\\\\");
+
+	// Check for unbalanced delimiters with more detailed reporting
+	if (hasUnbalancedDelimiters(cleanedTex)) {
+		console.warn(`Unbalanced delimiters in: ${cleanedTex}`);
+		if (element) {
+			const fb = customParser.renderFallback(tex, isDisplayMath);
 			element.innerHTML = "";
 			element.appendChild(fb);
 			element.classList.add("webtex-error-fallback");
+			element.title = "Unbalanced delimiters";
 		}
 		return { success: false, method: "unbalanced", element };
 	}
 
-	// Try KaTeX first
+	// Try KaTeX first with the original text
 	try {
-		// Preprocess with custom parser FIRST, then handle Unicode
-		let processedTex = tex;
-		if (customParser.canHandle(tex)) {
-			processedTex = customParser.simplify(tex);
+		// Preprocess with custom parser
+		let processedTex = cleanedTex;
+		if (customParser.canHandle(cleanedTex)) {
+			try {
+				processedTex = customParser.simplify(cleanedTex);
+			} catch (simplifyError) {
+				console.warn("Error in custom parser simplification:", simplifyError);
+				// Continue with original text if simplification fails
+			}
 		}
+
+		// Handle Unicode characters
 		processedTex = handleUnicodeInMath(processedTex);
 
-		// Dynamic KaTeX security/strict handlers
-		const trustHandler = (ctx) => {
-			// Allow href/url with safe protocols only; block others
-			if (["\\href", "\\url"].includes(ctx.command)) {
-				return ["http", "https", "_relative", "mailto"].includes(ctx.protocol);
-			}
-			return false; // Disallow everything else by default
-		};
-
-		const strictHandler = (errorCode, errorMsg, _token) => {
-			// Collect strict warnings as well
-			reportKaTeXError(tex, `${errorCode}: ${errorMsg}`);
-			return "ignore"; // Do not throw; continue rendering
-		};
-
+		// Configure KaTeX options
 		const katexOptions = {
-			displayMode: displayMode,
-			throwOnError: true, // Throw to capture parse errors
+			displayMode: isDisplayMath,
 			errorColor: "inherit",
-			strict: strictHandler,
-			trust: trustHandler,
+			strict: "warn", // Be more permissive with input
+			trust: (context) => {
+				// Allow common commands that need trust
+				const trustedCommands = [
+					"\\href",
+					"\\url",
+					"\\includegraphics",
+					"\\htmlId",
+					"\\htmlClass",
+					"\\htmlData",
+					"\\htmlStyle",
+					"\\class",
+					"\\id",
+					"\\data",
+					"\\style",
+				];
+				if (trustedCommands.includes(context.command)) {
+					return true;
+				}
+				// Allow specific protocols in URLs
+				if (["href", "url", "includegraphics"].includes(context.command)) {
+					const safeProtocols = ["http", "https", "data", "mailto", "ftp"];
+					return safeProtocols.some((proto) => context.url.startsWith(proto));
+				}
+				return false;
+			},
 			macros: {
 				"\\RR": "\\mathbb{R}",
 				"\\NN": "\\mathbb{N}",
@@ -690,13 +872,21 @@ async function renderMathExpression(tex, displayMode = false, element = null) {
 				"\\threequarters": "\\frac{3}{4}",
 				"\\to": "\\rightarrow",
 				"\\rac": "\\frac",
+				"\\qed": "\\quad \\blacksquare",
+				"\\abs": "\\left|#1\\right|",
+				"\\norm": "\\left\\|#1\\right\\|",
+				"\\set": "\\left\\{#1\\right\\}",
+				"\\paren": "\\left(#1\\right)",
+				"\\brack": "\\left[#1\\right]",
+				"\\eval": "\\left.#1\\right|_{#2}",
 			},
-			// Handle Unicode characters better
-			minRuleThickness: 0.05,
 			maxSize: 1000,
 			maxExpand: 1000,
+			maxCharacterCount: 10000,
+			throwOnError: true,
 		};
 
+		// Try rendering with KaTeX
 		const rendered = katex.renderToString(processedTex, katexOptions);
 		rendererState.katexSuccess++;
 
@@ -705,42 +895,46 @@ async function renderMathExpression(tex, displayMode = false, element = null) {
 			element.classList.add("webtex-katex-rendered");
 		}
 
-		return { success: true, method: "katex", element: element };
+		return { success: true, method: "katex", element };
 	} catch (katexError) {
-		// Capture and log KaTeX parse error
+		console.warn("KaTeX rendering failed, falling back to custom parser:", katexError);
 		reportKaTeXError(tex, katexError);
+
 		// Try custom parser as fallback
-		if (customParser.canHandle(tex)) {
-			try {
-				const simplified = customParser.simplify(tex);
-				const processedSimplified = handleUnicodeInMath(simplified);
-				const rendered = katex.renderToString(processedSimplified, {
-					displayMode,
-					throwOnError: false,
-					errorColor: "inherit",
-					strict: false,
-					trust: true,
-				});
+		try {
+			const simplified = customParser.simplify(cleanedTex);
+			const processedSimplified = handleUnicodeInMath(simplified);
 
-				if (element) {
-					element.innerHTML = rendered;
-					element.classList.add("webtex-custom-rendered");
-				}
+			// Use KaTeX in non-strict mode for the fallback
+			const rendered = katex.renderToString(processedSimplified, {
+				displayMode: isDisplayMath,
+				throwOnError: false,
+				errorColor: "inherit",
+				strict: false,
+				trust: true,
+			});
 
-				rendererState.customParserFallback++;
-				return { success: true, method: "custom", element: element };
-			} catch (_customError) {}
+			if (element) {
+				element.innerHTML = rendered;
+				element.classList.add("webtex-custom-rendered");
+			}
+
+			rendererState.customParserFallback++;
+			return { success: true, method: "custom", element };
+		} catch (customError) {
+			console.warn("Custom parser fallback failed:", customError);
+
+			// Final fallback - show original text with error styling
+			if (element) {
+				const fallbackElement = customParser.renderFallback(tex, isDisplayMath);
+				element.innerHTML = "";
+				element.appendChild(fallbackElement);
+				element.classList.add("webtex-error-fallback");
+				element.title = `Rendering failed: ${customError.message || "Unknown error"}`;
+			}
+
+			return { success: false, method: "error", element, error: customError };
 		}
-
-		// Final fallback - show original text with error styling
-		if (element) {
-			const fallbackElement = customParser.renderFallback(tex, displayMode);
-			element.innerHTML = "";
-			element.appendChild(fallbackElement);
-			element.classList.add("webtex-error-fallback");
-		}
-
-		return { success: false, method: "error", element: element };
 	}
 }
 
