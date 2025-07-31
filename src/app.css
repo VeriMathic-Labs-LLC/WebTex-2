@@ -1,66 +1,58 @@
-/* normalize css starts here */
-*,
-*::before,
-*::after {
-    margin: 0;
-    padding: 0;
-    box-sizing: border-box;
-}
-/* normalize css ends here */
+/* WebTeX Extension Styles - Scoped to extension elements only */
 
 /* WebTeX Enhanced Styling with proper color inheritance */
 .webtex-math-container {
-  display: inline;
-  color: inherit !important;
+	display: inline;
+	color: inherit !important;
 }
 
 .webtex-math {
-  display: inline-block;
-  color: inherit !important;
+	display: inline-block;
+	color: inherit !important;
 }
 
 .webtex-display {
-  display: block;
-  text-align: center;
-  margin: 1em 0;
-  color: inherit !important;
+	display: block;
+	text-align: center;
+	margin: 1em 0;
+	color: inherit !important;
 }
 
 .webtex-inline-math {
-  display: inline;
-  vertical-align: middle;
-  color: inherit !important;
+	display: inline;
+	vertical-align: middle;
+	color: inherit !important;
 }
 
 .webtex-display-math {
-  display: block;
-  text-align: center;
-  margin: 1em 0;
-  color: inherit !important;
+	display: block;
+	text-align: center;
+	margin: 1em 0;
+	color: inherit !important;
 }
 
 .webtex-processed {
-  display: inline;
-  color: inherit !important;
+	display: inline;
+	color: inherit !important;
 }
 
 /* KaTeX styling that adapts to website color scheme */
 .katex {
-  color: inherit !important;
-  font-size: 1.1em;
+	color: inherit !important;
+	font-size: 1.1em;
 }
 
 .katex-display {
-  color: inherit !important;
-  margin: 1em 0;
+	color: inherit !important;
+	margin: 1em 0;
 }
 
 .katex .katex-html {
-  color: inherit !important;
+	color: inherit !important;
 }
 
 .katex .katex-mathml {
-  color: inherit !important;
+	color: inherit !important;
 }
 
 /* Ensure all KaTeX elements inherit color */
@@ -68,36 +60,38 @@
 .katex *,
 .katex .katex-html *,
 .katex .katex-mathml * {
-  color: inherit !important;
+	color: inherit !important;
 }
 
 /* Custom fallback styling */
 .webtex-custom-fallback {
-  font-family: 'Computer Modern', 'Times New Roman', serif;
-  font-size: 1.1em;
-  color: inherit !important;
-  background: rgba(255, 235, 238, 0.3);
-  padding: 2px 4px;
-  border-radius: 3px;
-  border: 1px solid rgba(239, 154, 154, 0.5);
+	font-family: "Computer Modern", "Times New Roman", serif, sans-serif;
+	font-size: 1.1em;
+	color: inherit !important;
+	background: rgba(255, 235, 238, 0.3);
+	padding: 2px 4px;
+	border-radius: 3px;
+	border: 1px solid rgba(239, 154, 154, 0.5);
+	box-sizing: border-box;
 }
 
 /* Error fallback styling */
 .webtex-error-fallback {
-  font-family: 'Courier New', monospace;
-  font-size: 0.9em;
-  color: inherit !important;
-  background: rgba(255, 235, 238, 0.3);
-  padding: 2px 4px;
-  border-radius: 3px;
-  border: 1px solid rgba(239, 154, 154, 0.5);
-  margin: 0 2px;
+	font-family: "Courier New", "Monaco", monospace, sans-serif;
+	font-size: 0.9em;
+	color: inherit !important;
+	background: rgba(255, 235, 238, 0.3);
+	padding: 2px 4px;
+	border-radius: 3px;
+	border: 1px solid rgba(239, 154, 154, 0.5);
+	margin: 0 2px;
+	box-sizing: border-box;
 }
 
 /* Ensure all rendered elements inherit color */
 .webtex-katex-rendered,
 .webtex-custom-rendered {
-  color: inherit !important;
+	color: inherit !important;
 }
 
 /* Additional KaTeX color inheritance fixes */
@@ -116,24 +110,24 @@
 .katex .katex-html .mathscr,
 .katex .katex-html .mathsf,
 .katex .katex-html .mathtt {
-  color: inherit !important;
+	color: inherit !important;
 }
 
 /* Dark mode specific adjustments */
 @media (prefers-color-scheme: dark) {
-  .katex {
-    color: inherit !important;
-  }
-  
-  .webtex-custom-fallback,
-  .webtex-error-fallback {
-    background: rgba(255, 235, 238, 0.1);
-    border-color: rgba(239, 154, 154, 0.3);
-  }
+	.katex {
+		color: inherit !important;
+	}
+
+	.webtex-custom-fallback,
+	.webtex-error-fallback {
+		background: rgba(255, 235, 238, 0.1);
+		border-color: rgba(239, 154, 154, 0.3);
+	}
 }
 
 /* Force color inheritance for all math elements */
 .katex-display,
 .katex-display * {
-  color: inherit !important;
-} 
+	color: inherit !important;
+}

@@ -1,0 +1,664 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>WebTeX Comprehensive Test Suite</title>
+    <!-- Simulate CSP for testing -->
+    <meta http-equiv="Content-Security-Policy" content="font-src 'self' github.githubassets.com; style-src 'self' 'unsafe-inline';">
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            max-width: 1000px;
+            margin: 0 auto;
+            padding: 20px;
+            line-height: 1.6;
+            background-color: #f5f5f5;
+            color: #333;
+        }
+
+        /* Dark mode support */
+        .dark-mode {
+            background: #2d3748;
+            color: #e2e8f0;
+        }
+        
+        .dark-mode .test-section {
+            background: #4a5568;
+            border-color: #718096;
+        }
+        
+        .dark-mode .math-example {
+            background: #2d3748;
+            border-left-color: #63b3ed;
+        }
+
+        /* Navigation */
+        .nav-container {
+            position: sticky;
+            top: 0;
+            background: white;
+            padding: 15px;
+            margin-bottom: 30px;
+            border-radius: 8px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+            z-index: 100;
+        }
+        
+        .dark-mode .nav-container {
+            background: #4a5568;
+        }
+
+        .nav-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 10px;
+            margin-top: 10px;
+        }
+
+        .nav-link {
+            padding: 8px 12px;
+            background: #007cba;
+            color: white;
+            text-decoration: none;
+            border-radius: 4px;
+            text-align: center;
+            font-size: 0.9em;
+        }
+
+        .nav-link:hover {
+            background: #005a87;
+        }
+
+        /* Control buttons */
+        .controls {
+            position: fixed;
+            top: 20px;
+            right: 20px;
+            display: flex;
+            gap: 10px;
+            z-index: 200;
+        }
+
+        .control-btn {
+            padding: 10px 15px;
+            background: #007acc;
+            color: white;
+            border: none;
+            border-radius: 5px;
+            cursor: pointer;
+            font-size: 0.9em;
+        }
+
+        .control-btn:hover {
+            background: #005a99;
+        }
+
+        /* Test sections */
+        .test-section {
+            margin: 30px 0;
+            padding: 20px;
+            border: 1px solid #ddd;
+            border-radius: 8px;
+            background-color: white;
+        }
+
+        .test-section h2 {
+            margin-top: 0;
+            color: #333;
+            border-bottom: 2px solid #007cba;
+            padding-bottom: 10px;
+        }
+
+        .test-section h3 {
+            margin-top: 25px;
+            color: #333;
+        }
+
+        /* Math examples */
+        .math-example {
+            background: #f9f9f9;
+            padding: 15px;
+            margin: 15px 0;
+            border-left: 4px solid #007cba;
+            border-radius: 4px;
+        }
+
+        /* Status and info boxes */
+        .description {
+            color: #666;
+            font-size: 0.9em;
+            margin-bottom: 10px;
+        }
+
+        .expected {
+            background: #e8f5e8;
+            padding: 10px;
+            margin: 10px 0;
+            border-left: 4px solid #4caf50;
+            border-radius: 4px;
+        }
+
+        .warning {
+            background: #fff3cd;
+            padding: 10px;
+            margin: 10px 0;
+            border-left: 4px solid #ffc107;
+            border-radius: 4px;
+        }
+
+        .error {
+            background: #f8d7da;
+            padding: 10px;
+            margin: 10px 0;
+            border-left: 4px solid #dc3545;
+            border-radius: 4px;
+        }
+
+        .info {
+            background: #d1ecf1;
+            padding: 10px;
+            margin: 10px 0;
+            border-left: 4px solid #17a2b8;
+            border-radius: 4px;
+        }
+
+        .console-log {
+            background: #f8f9fa;
+            padding: 10px;
+            margin: 10px 0;
+            border: 1px solid #dee2e6;
+            border-radius: 4px;
+            font-family: 'SFMono-Regular', Consolas, 'Liberation Mono', Menlo, monospace;
+            font-size: 0.9em;
+        }
+
+        /* Special styling for test categories */
+        .problematic {
+            background-color: #fff3cd;
+            border-left-color: #ffc107;
+        }
+
+        .success {
+            background-color: #d4edda;
+            border-left-color: #28a745;
+        }
+
+        .status {
+            padding: 15px;
+            margin: 20px 0;
+            border-radius: 8px;
+            font-weight: bold;
+            text-align: center;
+        }
+
+        /* Enhanced WebTeX CSS fixes */
+        .katex, .katex * {
+            color: inherit !important;
+        }
+        
+        .MathJax, .MathJax * {
+            color: inherit !important;
+        }
+        
+        .webtex-math-container,
+        .webtex-math,
+        .webtex-display,
+        .webtex-inline-math,
+        .webtex-display-math,
+        .webtex-processed {
+            color: inherit !important;
+        }
+
+        /* Responsive design */
+        @media (max-width: 768px) {
+            .controls {
+                position: relative;
+                margin-bottom: 20px;
+            }
+            
+            .nav-container {
+                position: relative;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="controls">
+        <button class="control-btn" onclick="toggleDarkMode()">🌙 Dark Mode</button>
+        <button class="control-btn" onclick="refreshTests()">🔄 Refresh</button>
+    </div>
+
+    <div class="nav-container">
+        <h1>WebTeX Comprehensive Test Suite</h1>
+        <p>Complete test coverage for WebTeX KaTeX + Custom Parser hybrid renderer</p>
+        
+        <div class="nav-grid">
+            <a href="#basic-tests" class="nav-link">Basic Tests</a>
+            <a href="#nuclear-physics" class="nav-link">Nuclear Physics</a>
+            <a href="#unicode-tests" class="nav-link">Unicode & Characters</a>
+            <a href="#fraction-tests" class="nav-link">Fraction Tests</a>
+            <a href="#csp-tests" class="nav-link">CSP & Font Tests</a>
+            <a href="#error-handling" class="nav-link">Error Handling</a>
+            <a href="#environments" class="nav-link">LaTeX Environments</a>
+            <a href="#hybrid-tests" class="nav-link">Hybrid Rendering</a>
+            <a href="#console-check" class="nav-link">Console Output</a>
+        </div>
+    </div>
+
+    <div id="status" class="status info">WebTeX extension status: Loading...</div>
+
+    <!-- BASIC FUNCTIONALITY TESTS -->
+    <div class="test-section" id="basic-tests">
+        <h2>1. Basic Functionality Tests</h2>
+        
+        <div class="warning">
+            <strong>Extension Toggle Test:</strong>
+            <ol>
+                <li>Click the WebTeX extension icon in your browser toolbar</li>
+                <li>The popup should show the current domain and toggle status</li>
+                <li>Click the toggle switch to enable/disable WebTeX on this site</li>
+                <li>Check the console for initialization and toggle messages</li>
+            </ol>
+        </div>
+
+        <h3>Basic Math Expressions</h3>
+        <div class="math-example">
+            <strong>Inline math:</strong> The quadratic formula is $x = \frac{-b \pm \sqrt{b^2 - 4ac}}{2a}$<br>
+            <strong>Display math:</strong> The Pythagorean theorem states:
+            $$a^2 + b^2 = c^2$$
+            <strong>Greek letters:</strong> $\alpha + \beta = \gamma$ and $\pi \approx 3.14159$
+        </div>
+
+        <h3>Color Contrast Tests</h3>
+        <div class="math-example" style="background-color: #e0e0e0;">
+            <strong>Light background:</strong> $E = mc^2$ should be clearly visible<br>
+            $$\int_{-\infty}^{\infty} e^{-x^2} dx = \sqrt{\pi}$$
+        </div>
+        
+        <div class="math-example" style="background-color: #333; color: white;">
+            <strong>Dark background:</strong> $E = mc^2$ should be clearly visible<br>
+            $$\int_{-\infty}^{\infty} e^{-x^2} dx = \sqrt{\pi}$$
+        </div>
+
+        <div class="expected">
+            <strong>Expected:</strong> All math expressions should render properly with good contrast on both light and dark backgrounds.
+        </div>
+    </div>
+
+    <!-- NUCLEAR PHYSICS TESTS -->
+    <div class="test-section" id="nuclear-physics">
+        <h2>2. Nuclear Physics Tests</h2>
+        
+        <h3>Nuclear Notation with Text Commands</h3>
+        <div class="math-example">
+            <p>Basic nuclear notation: $\text{_Z^A X}$ - should render as superscript/subscript</p>
+            <p>Alpha decay: $\text{_88^226 Ra} \to \text{_86^222 Rn} + \text{_2^4 He}$</p>
+            <p>Beta decay: $\text{_6^14 C} \to \text{_7^14 N} + \text{e^-} + \bar{\nu}$</p>
+            <p>General alpha decay: $\text{Z^A N} \to \text{{Z-2}^{A-4} N'} + \text{_2^4 He}$</p>
+            <p>Beta minus decay: $\text{Z^A N} \to \text{{Z+1}^{A} N'} + \text{e^-} + \bar{\nu}$</p>
+            <p>Beta plus decay: $\text{Z^A N} \to \text{{Z-1}^{A} N'} + \text{e^+} + \nu$</p>
+        </div>
+
+        <h3>Enhanced Nuclear Physics Formulas</h3>
+        <div class="math-example">
+            <p><strong>Neutron Number:</strong> $N = A - Z$</p>
+            <p><strong>Nuclide Symbolization:</strong> $^{A}_{Z}X$</p>
+            <p><strong>Nucleus Radius:</strong> $r \approx (1.2 \times 10^{-15} \text{ m})(A^{1/3})$</p>
+            <p><strong>Mass-Energy Conversions:</strong><br>
+               $1 \text{ u} = 1.6605 \times 10^{-27} \text{ kg}$<br>
+               $1 \text{ u} = 931.5 \text{ MeV/c}^2$</p>
+            <p><strong>General Alpha Decay:</strong> $^{A}_{Z}\text{N} \rightarrow ^{A-4}_{Z-2}\text{N'} + ^{4}_{2}\text{He}$</p>
+            <p><strong>General Beta-Minus Decay:</strong> $^{A}_{Z}\text{N} \rightarrow ^{A}_{Z+1}\text{N'} + \text{e}^- + \bar{\nu}$</p>
+        </div>
+
+        <h3>Complex Nuclear Examples</h3>
+        <div class="math-example">
+            <p>Positron emission: $\text{_10^19 Ne} \to \text{_9^19 F} + \text{e^+} + \nu$</p>
+            <p>Electron capture: $\text{Z^A N} + \text{e^-} \to \text{{Z-1}^{A} N'} + \nu$</p>
+            <p>Gamma decay: $\text{_Z^A N*} \to \text{_Z^A N} + \gamma$</p>
+            <p>Nuclear capture: $\text{{}^{A}\text{N}} + e^{-} \rightarrow {}^{A}_{Z-1}\text{N'} + \nu$</p>
+        </div>
+
+        <div class="expected">
+            <strong>Expected:</strong> All nuclear notation should render with proper subscripts and superscripts without KaTeX errors.
+        </div>
+    </div>
+
+    <!-- UNICODE AND CHARACTER TESTS -->
+    <div class="test-section" id="unicode-tests">
+        <h2>3. Unicode & Character Handling Tests</h2>
+        
+        <h3>Unicode Fractions</h3>
+        <div class="math-example">
+            <p>Unicode fraction: ½ should render as $\frac{1}{2}$</p>
+            <p>Multiple fractions: ⅓, ⅔, ¼, ¾, ⅕, ⅖, ⅗, ⅘, ⅙, ⅚</p>
+            <p>Mixed Unicode: $x = ½ + ¼$ should become $x = \frac{1}{2} + \frac{1}{4}$</p>
+        </div>
+
+        <h3>Unicode Math Symbols</h3>
+        <div class="math-example">
+            <p>Arrow: → should render as $\rightarrow$</p>
+            <p>Set membership: ∈ should render as $\in$</p>
+            <p>Subset: ⊆ should render as $\subseteq$</p>
+            <p>Greek letters: ν (nu), γ (gamma)</p>
+            <p>Set theory: $\forall x \in A, x \in A$ and $\emptyset \subseteq A$</p>
+        </div>
+
+        <h3>Mixed Content with Unicode</h3>
+        <div class="math-example">
+            <p>Chinese characters in math: $E = mc^2$ where 是 represents energy</p>
+            <p>Unicode fractions: ½, ⅓, ⅔, ¼, ¾</p>
+            <p>Complex mixing: $\frac{1}{2} + \frac{1}{3} = \frac{5}{6}$ and ½ + ⅓ = ⅚</p>
+        </div>
+
+        <div class="expected">
+            <strong>Expected:</strong> Unicode characters should be properly converted to LaTeX equivalents or wrapped in text commands.
+        </div>
+    </div>
+
+    <!-- FRACTION TESTS -->
+    <div class="test-section" id="fraction-tests">
+        <h2>4. Fraction Fallback Tests</h2>
+        
+        <div class="info">
+            <strong>Note:</strong> These tests focus on fraction content that might cause KaTeX font errors like "No character metrics for '½'". The extension should detect these patterns and use appropriate rendering.
+        </div>
+
+        <h3>Basic Fractions (Font Error Prone)</h3>
+        <div class="math-example">
+            <p>$\frac{1}{2}$ - One half</p>
+            <p>$\frac{1}{3}$ - One third</p>
+            <p>$\frac{2}{3}$ - Two thirds</p>
+            <p>$\frac{1}{4}$ - One quarter</p>
+            <p>$\frac{3}{4}$ - Three quarters</p>
+        </div>
+
+        <h3>Complex Fractions</h3>
+        <div class="math-example">
+            <p>$\frac{1}{5}$, $\frac{2}{5}$, $\frac{3}{5}$, $\frac{4}{5}$</p>
+            <p>$\frac{1}{6}$, $\frac{5}{6}$</p>
+            <p>$\frac{1}{8}$, $\frac{3}{8}$, $\frac{5}{8}$, $\frac{7}{8}$</p>
+        </div>
+
+        <h3>Malformed Fraction Notation</h3>
+        <div class="math-example">
+            <p>rac27 - Should render as $\frac{2}{7}$</p>
+            <p>The sum is rac{1}{7} + rac{2}{7} = rac{3}{7}</p>
+            <p>Standalone rac should become $\frac{}{}$</p>
+        </div>
+
+        <h3>Mixed Fraction Content</h3>
+        <div class="math-example">
+            <p>The probability is $\frac{1}{2}$ or 50%.</p>
+            <p>The area is $\frac{1}{4}$ of the total: $A = \frac{1}{4} \times \pi r^2$</p>
+            <p>Complex fraction: $$\frac{\frac{1}{2} + \frac{1}{3}}{\frac{1}{4} + \frac{1}{5}} = \frac{50}{27}$$</p>
+        </div>
+
+        <div class="expected">
+            <strong>Expected:</strong> No "No character metrics" errors, no KaTeX font-related error messages.
+        </div>
+    </div>
+
+    <!-- CSP AND FONT LOADING TESTS -->
+    <div class="test-section" id="csp-tests">
+        <h2>5. CSP & Font Loading Tests</h2>
+        
+        <div class="warning">
+            <strong>Note:</strong> This page includes a Content Security Policy meta tag that restricts font loading, similar to GitHub's CSP. The extension should handle this gracefully.
+        </div>
+
+        <h3>Font Error Prevention</h3>
+        <div class="math-example">
+            <p>$\frac{1}{2}$, $\frac{1}{3}$, $\frac{2}{3}$, $\frac{1}{4}$, $\frac{3}{4}$ - Fractions typically cause font errors</p>
+            <p>Nuclear notation: $\text{_88^226 Ra} \to \text{_86^222 Rn} + \text{_2^4 He}$</p>
+            <p>Complex expressions: $\sum_{i=1}^{n} \frac{x_i^2}{\sigma_i^2}$</p>
+        </div>
+
+        <h3>KaTeX Font Accessibility</h3>
+        <div class="math-example">
+            <p>These should render without "Refused to load the font" errors:</p>
+            <p>$$\int_{-\infty}^{\infty} e^{-x^2} dx = \sqrt{\pi}$$</p>
+            <p>$\lim_{n \to \infty} \left(1 + \frac{1}{n}\right)^n = e$</p>
+        </div>
+
+        <div class="expected">
+            <strong>Expected:</strong> No "Refused to load the font" errors, no Content Security Policy violations.
+        </div>
+    </div>
+
+    <!-- ERROR HANDLING AND PROBLEMATIC EXPRESSIONS -->
+    <div class="test-section" id="error-handling">
+        <h2>6. Error Handling & Problematic Expressions</h2>
+        
+        <h3>Malformed Expressions (Should Be Fixed)</h3>
+        <div class="math-example problematic">
+            <p><strong>Original problematic:</strong> $L=-1N∑(}(y p()+(1-y) (1-p())) $</p>
+            <p><strong>Nested braces:</strong> $x^{2+3} + y_{i,j} + \frac{a}{b} + \sqrt{c}$</p>
+        </div>
+
+        <h3>Brace Cleanup Tests</h3>
+        <div class="math-example">
+            <p><strong>Unmatched braces:</strong> $x^{2 + y_{3} + z$ (missing closing brace)</p>
+            <p><strong>Extra closing braces:</strong> $x^{2}} + y_{3}}$ (extra closing braces)</p>
+            <p><strong>Empty braces:</strong> $x^{} + y_{}$ (empty braces)</p>
+        </div>
+
+        <h3>Typo Fixes</h3>
+        <div class="math-example">
+            <p>infty should become $\infty$</p>
+            <p>$\lim_{x \to infty} \frac{1}{x} = 0$ should render properly</p>
+            <p>Limit fixes: $\lim_{x o infty}$ should become $\lim_{x \to \infty}$</p>
+        </div>
+
+        <div class="expected">
+            <strong>Expected:</strong> All malformed expressions should be cleaned up and render properly.
+        </div>
+    </div>
+
+    <!-- LATEX ENVIRONMENTS -->
+    <div class="test-section" id="environments">
+        <h2>7. LaTeX Environments</h2>
+        
+        <h3>Equation Environments</h3>
+        <div class="math-example">
+            <p>Equation environment: $\begin{equation} E = mc^2 \end{equation}$</p>
+            <p>Align environment: $\begin{align} (a + b)^2 &= a^2 + 2ab + b^2 \\ &= a^2 + b^2 + 2ab \end{align}$</p>
+            <p>Aligned environment: $\begin{aligned} x &= a + b \\ y &= c + d \end{aligned}$</p>
+        </div>
+
+        <h3>Matrix Environments</h3>
+        <div class="math-example">
+            <p>Parentheses matrix: $\begin{pmatrix} a & b \\ c & d \end{pmatrix}$</p>
+            <p>Matrix multiplication: $\begin{pmatrix} a & b \\ c & d \end{pmatrix} \begin{pmatrix} x \\ y \end{pmatrix} = \begin{pmatrix} ax + by \\ cx + dy \end{pmatrix}$</p>
+            <p>Brackets matrix: $\begin{bmatrix} 1 & 0 \\ 0 & 1 \end{bmatrix}$</p>
+        </div>
+
+        <h3>Text Wrapper Processing</h3>
+        <div class="math-example">
+            <p>Simple text: $\text{energy}$ should be processed</p>
+            <p>Math in text: $\text{x + y = z}$ should drop wrapper if appropriate</p>
+            <p>Complex text: $\text{H_2O}$ should keep wrapper</p>
+        </div>
+
+        <div class="expected">
+            <strong>Expected:</strong> Environments should be converted to KaTeX-compatible format automatically.
+        </div>
+    </div>
+
+    <!-- HYBRID RENDERING TESTS -->
+    <div class="test-section" id="hybrid-tests">
+        <h2>8. Hybrid Rendering Tests</h2>
+        
+        <h3>KaTeX Primary, Custom Fallback</h3>
+        <div class="math-example">
+            <p><strong>Should use KaTeX:</strong> $\int_{0}^{\pi} \sin(x) dx = 2$</p>
+            <p><strong>Should use KaTeX:</strong> $$\sum_{n=1}^{\infty} \frac{1}{n^2} = \frac{\pi^2}{6}$$</p>
+            <p><strong>Should fallback to custom:</strong> $\text{_88^226 Ra} \to \text{_86^222 Rn} + \text{_2^4 He}$</p>
+        </div>
+
+        <h3>Complex Mixed Expressions</h3>
+        <div class="math-example">
+            <p>Quantum mechanics: $\psi(x,t) = A e^{i(kx - \omega t)}$</p>
+            <p>Schrödinger equation: $i\hbar \frac{\partial \psi}{\partial t} = \hat{H}\psi$</p>
+            <p>Uncertainty principle: $\Delta x \Delta p \geq \frac{\hbar}{2}$</p>
+            <p>Maxwell's equations: $\nabla \cdot \mathbf{E} = \frac{\rho}{\epsilon_0}$</p>
+        </div>
+
+        <h3>Performance Test (Multiple Expressions)</h3>
+        <div class="math-example">
+            <p>$f(x) = ax^2 + bx + c$ and $g(x) = dx + e$ and $h(x) = f(x) \cdot g(x)$</p>
+            <p>$\frac{d}{dx}[f(x)] = 2ax + b$ and $\frac{d}{dx}[g(x)] = d$</p>
+            <p>$\int f(x) dx = \frac{a}{3}x^3 + \frac{b}{2}x^2 + cx + C$</p>
+        </div>
+
+        <div class="expected">
+            <strong>Expected:</strong> Fast rendering with appropriate renderer selection for each expression type.
+        </div>
+    </div>
+
+    <!-- CONSOLE OUTPUT CHECK -->
+    <div class="test-section" id="console-check">
+        <h2>9. Console Output Check</h2>
+        
+        <div class="console-log">
+            <strong>Expected Initialization Messages:</strong><br>
+            • "Enhanced LaTeX renderer initialized" or "WebTeX: Initializing on [domain]"<br>
+            • "WebTeX: Rendering complete" with statistics<br><br>
+            
+            <strong>Toggle Actions (if testing popup):</strong><br>
+            • "WebTeX: Domain update received, new enabled state: [true/false]"<br>
+            • "WebTeX: Message sent to content script, response: {success: true}"<br><br>
+            
+            <strong>Rendering Process:</strong><br>
+            • "WebTeX: KaTeX failed, trying custom parser" (for fallback cases)<br>
+            • Statistics showing katex vs custom parser usage<br>
+            • Success rate percentage<br><br>
+            
+            <strong>Error Prevention:</strong><br>
+            • NO "No character metrics" errors<br>
+            • NO "Refused to load the font" errors<br>
+            • NO "Content Security Policy" violations<br>
+            • NO MathJax-related errors
+        </div>
+
+        <div class="info">
+            <strong>Performance Stats:</strong> Check <code>window.rendererState</code> in console for detailed statistics.
+        </div>
+    </div>
+
+    <!-- DYNAMIC CONTENT TEST -->
+    <div class="test-section" id="dynamic-content">
+        <h2>10. Dynamic Content Test</h2>
+        <div class="description">This section will be added dynamically to test SPA navigation detection.</div>
+        <div id="dynamic-placeholder">
+            <p><em>Dynamic content will appear here in 3 seconds...</em></p>
+        </div>
+    </div>
+
+    <script>
+        // Force enable for testing - add current domain to allowed list
+        (async function enableForTesting() {
+            if (typeof chrome !== 'undefined' && chrome.storage) {
+                try {
+                    const currentDomain = location.hostname || 'localhost';
+                    const { allowedDomains = [] } = await chrome.storage.local.get('allowedDomains');
+                    
+                    if (!allowedDomains.includes(currentDomain)) {
+                        allowedDomains.push(currentDomain);
+                        await chrome.storage.local.set({ allowedDomains });
+                        console.log('WebTeX: Added', currentDomain, 'to allowed domains for testing');
+                        
+                        // Send message to content script to enable immediately
+                        if (chrome.tabs) {
+                            const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
+                            if (tab?.id) {
+                                chrome.tabs.sendMessage(tab.id, { 
+                                    action: 'domain-updated', 
+                                    allowed: allowedDomains 
+                                });
+                            }
+                        }
+                    }
+                } catch (e) {
+                    console.log('WebTeX: Could not auto-enable (normal for content script context)');
+                }
+            }
+        })();
+
+        // Dark mode toggle
+        function toggleDarkMode() {
+            document.body.classList.toggle('dark-mode');
+            localStorage.setItem('darkMode', document.body.classList.contains('dark-mode'));
+        }
+
+        // Load dark mode preference
+        if (localStorage.getItem('darkMode') === 'true') {
+            document.body.classList.add('dark-mode');
+        }
+
+        // Refresh tests
+        function refreshTests() {
+            location.reload();
+        }
+
+        // Status checker
+        function updateStatus() {
+            const status = document.getElementById('status');
+            if (window.rendererState) {
+                const stats = window.rendererState;
+                const total = stats.totalAttempts || 0;
+                const success = (stats.katexSuccess || 0) + (stats.customParserFallback || 0);
+                const rate = total > 0 ? (success / total * 100).toFixed(1) : '0';
+                
+                status.className = 'status success';
+                status.innerHTML = `✅ WebTeX Active | Rendered: ${total} expressions | Success Rate: ${rate}% | KaTeX: ${stats.katexSuccess || 0} | Custom: ${stats.customParserFallback || 0}`;
+            } else {
+                status.className = 'status error';
+                status.innerHTML = '❌ WebTeX not detected or not active on this domain';
+            }
+        }
+
+        // Add dynamic content to test SPA behavior
+        setTimeout(() => {
+            const placeholder = document.getElementById('dynamic-placeholder');
+            if (placeholder) {
+                placeholder.innerHTML = `
+                    <h3>Dynamically Added Content</h3>
+                    <div class="math-example">
+                        <strong>Dynamic math expressions:</strong><br>
+                        $\\frac{1}{2} + \\frac{1}{3} = \\frac{5}{6}$<br>
+                        The derivative of $f(x) = x^3$ is $f'(x) = 3x^2$<br>
+                        Limit: $\\lim_{x \\to 0} \\frac{\\sin x}{x} = 1$
+                    </div>
+                    <div class="expected">
+                        <strong>Expected:</strong> These dynamically added expressions should render automatically.
+                    </div>
+                `;
+            }
+        }, 3000);
+
+        // Update status periodically
+        setInterval(updateStatus, 2000);
+        
+        // Initial status check
+        setTimeout(updateStatus, 1000);
+
+        // Smooth scrolling for navigation links
+        document.querySelectorAll('.nav-link').forEach(link => {
+            link.addEventListener('click', function(e) {
+                e.preventDefault();
+                const target = document.querySelector(this.getAttribute('href'));
+                if (target) {
+                    target.scrollIntoView({ behavior: 'smooth' });
+                }
+            });
+        });
+
+        // Log test page info
+        console.log('WebTeX Comprehensive Test Suite loaded');
+        console.log('Test categories: Basic, Nuclear Physics, Unicode, Fractions, CSP, Error Handling, Environments, Hybrid, Console Check');
+        console.log('Check window.rendererState for renderer statistics');
+    </script>
+</body>
+</html>
