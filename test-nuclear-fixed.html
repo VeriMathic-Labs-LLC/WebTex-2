@@ -1,0 +1,124 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>WebTeX Nuclear Notation Test - Fixed</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            max-width: 900px;
+            margin: 0 auto;
+            padding: 20px;
+            line-height: 1.6;
+        }
+        
+        .test-section {
+            margin: 30px 0;
+            padding: 20px;
+            border: 2px solid #ddd;
+            border-radius: 8px;
+            background: #f9f9f9;
+        }
+        
+        .math-example {
+            margin: 15px 0;
+            padding: 10px;
+            border-left: 4px solid #007acc;
+            background: white;
+        }
+        
+        .status {
+            padding: 15px;
+            margin: 20px 0;
+            border-radius: 8px;
+            font-weight: bold;
+            text-align: center;
+        }
+        
+        .success { background: #d4edda; color: #155724; border: 2px solid #28a745; }
+        .error { background: #f8d7da; color: #721c24; border: 2px solid #dc3545; }
+        .info { background: #d1ecf1; color: #0c5460; border: 2px solid #17a2b8; }
+    </style>
+</head>
+<body>
+    <h1>WebTeX Nuclear Notation Test - Fixed</h1>
+    
+    <div id="status" class="status info">Loading WebTeX extension...</div>
+    
+    <div class="test-section">
+        <h2>Nuclear Notation with Text Commands (Should Work Now)</h2>
+        <div class="math-example">
+            <p>Basic nuclear notation: $\text{_Z^A X}$ - should render as superscript/subscript</p>
+            <p>Alpha decay: $\text{_88^226 Ra} \to \text{_86^222 Rn} + \text{_2^4 He}$</p>
+            <p>Beta decay: $\text{_6^14 C} \to \text{_7^14 N} + \text{e^-} + \bar{\nu}$</p>
+            <p>General alpha decay: $\text{Z^A N} \to \text{{Z-2}^{A-4} N'} + \text{_2^4 He}$</p>
+            <p>Beta minus decay: $\text{Z^A N} \to \text{{Z+1}^{A} N'} + \text{e^-} + \bar{\nu}$</p>
+            <p>Beta plus decay: $\text{Z^A N} \to \text{{Z-1}^{A} N'} + \text{e^+} + \nu$</p>
+        </div>
+    </div>
+    
+    <div class="test-section">
+        <h2>Already Formatted Nuclear Notation</h2>
+        <div class="math-example">
+            <p>$^{A}{Z}\text{N} \rightarrow ^{A-4}{Z-2}\text{N'} + ^{4}{2}\text{He}$ - General alpha decay</p>
+            <p>$^{A}{Z}\text{N} \rightarrow ^{A}{Z+1}\text{N'} + \text{e}^- + \bar{\nu}$ - Beta minus decay</p>
+            <p>$^{A}{Z}\text{N} \rightarrow ^{A}{Z-1}\text{N'} + \text{e}^+ + \nu$ - Beta plus decay</p>
+        </div>
+    </div>
+    
+    <div class="test-section">
+        <h2>Fraction Notation Tests</h2>
+        <div class="math-example">
+            <p>rac27 - Should render as $\frac{2}{7}$</p>
+            <p>The sum is rac{1}{7} + rac{2}{7} = rac{3}{7}</p>
+            <p>Unicode fractions: ½, ⅓, ⅔, ¼, ¾</p>
+        </div>
+    </div>
+    
+    <div class="test-section">
+        <h2>Environment Tests</h2>
+        <div class="math-example">
+            <p>Equation environment: $\begin{equation} E = mc^2 \end{equation}$</p>
+            <p>Align environment: $\begin{align} (a + b)^2 &= a^2 + 2ab + b^2 \\ &= a^2 + b^2 + 2ab \end{align}$</p>
+            <p>Limit: $\lim_{x \to \infty} \frac{1}{x} = 0$</p>
+        </div>
+    </div>
+    
+    <div class="test-section">
+        <h2>Matrix Notation</h2>
+        <div class="math-example">
+            <p>$\begin{pmatrix} a & b \\ c & d \end{pmatrix} \begin{pmatrix} x \\ y \end{pmatrix} = \begin{pmatrix} ax + by \\ cx + dy \end{pmatrix}$</p>
+        </div>
+    </div>
+    
+    <script>
+        // Test if WebTeX is loaded
+        setTimeout(() => {
+            const status = document.getElementById('status');
+            if (window.rendererState) {
+                status.className = 'status success';
+                status.textContent = 'WebTeX loaded successfully! Check console for rendering stats.';
+                console.log('WebTeX loaded successfully');
+                console.log('Renderer state:', window.rendererState);
+                
+                // Monitor for changes
+                setInterval(() => {
+                    console.log('Current renderer state:', {
+                        total: window.rendererState.totalAttempts,
+                        katex: window.rendererState.katexSuccess,
+                        custom: window.rendererState.customParserFallback,
+                        successRate: window.rendererState.totalAttempts > 0 ? 
+                            ((window.rendererState.katexSuccess + window.rendererState.customParserFallback) / window.rendererState.totalAttempts * 100).toFixed(1) + '%' : '0%'
+                    });
+                }, 3000);
+                
+            } else {
+                status.className = 'status error';
+                status.textContent = 'WebTeX not detected. Please check if the extension is loaded.';
+                console.log('WebTeX not detected');
+            }
+        }, 2000);
+    </script>
+</body>
+</html>
