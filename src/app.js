@@ -375,75 +375,132 @@ class CustomLatexParser {
 		return simplified;
 	}
 
-	fixMalformedLatex(str) {
-		// Fix common malformed patterns
-		const result = str;
+	getNextArgument(str, index) {
+		let i = index;
+		while (i < str.length && /\s/.test(str[i])) {
+			i++; // Skip whitespace
+		}
+		if (i >= str.length) return null;
 
-		// Fix unclosed braces in complex expressions
-		let braceCount = 0;
-		let inMathCommand = false;
-		let fixedResult = "";
+		const startIndex = i;
+		const char = str[i];
 
-		for (let i = 0; i < result.length; i++) {
-			const char = result[i];
-
-			// Detect if we're in a math command like \frac, \sqrt, etc.
-			if (char === "\\") {
-				inMathCommand = true;
-			} else if (inMathCommand && /[a-zA-Z]/.test(char)) {
-				// Still in command name
-			} else if (inMathCommand && /[^a-zA-Z]/.test(char)) {
-				inMathCommand = false;
+		if (char === "{") {
+			let braceCount = 1;
+			let j = i + 1;
+			while (j < str.length) {
+				if (str[j] === "{" && str[j - 1] !== "\\") {
+					braceCount++;
+				} else if (str[j] === "}" && str[j - 1] !== "\\") {
+					braceCount--;
+				}
+				if (braceCount === 0) {
+					return { value: str.substring(i + 1, j), length: j + 1 - startIndex };
+				}
+				j++;
 			}
+			// Unmatched brace, return rest of string
+			return { value: str.substring(i + 1), length: str.length - startIndex };
+		}
 
+		if (char === "\\") {
+			const match = str.slice(i).match(/^\\[a-zA-Z]+(?=\s|{|}|\[|\(|\[|$)/);
+			if (match) {
+				return { value: match[0], length: match[0].length + (i - startIndex) };
+			}
+			// Escaped char
+			return { value: str.slice(i, i + 2), length: 2 + (i - startIndex) };
+		}
+
+		// Single character
+		return { value: char, length: 1 + (i - startIndex) };
+	}
+
+	fixMalformedLatex(str) {
+		let fixed = "";
+		let i = 0;
+		while (i < str.length) {
+			const char = str[i];
+
+			if (char === "\\") {
+				const commandMatch = str.slice(i).match(/^\\[a-zA-Z]+/);
+				if (commandMatch) {
+					const command = commandMatch[0];
+					fixed += command;
+					i += command.length;
+
+					if (command === "\\frac") {
+						const arg1Result = this.getNextArgument(str, i);
+						if (arg1Result) {
+							fixed += `{${arg1Result.value}}`;
+							i += arg1Result.length;
+							const arg2Result = this.getNextArgument(str, i);
+							if (arg2Result) {
+								fixed += `{${arg2Result.value}}`;
+								i += arg2Result.length;
+							} else {
+								fixed += "{}";
+							}
+						} else {
+							fixed += "{}";
+						}
+					}
+				} else {
+					fixed += char;
+					i++;
+				}
+			} else if (char === "^" || char === "_") {
+				fixed += char;
+				i++;
+				const argResult = this.getNextArgument(str, i);
+				if (argResult) {
+					fixed += `{${argResult.value}}`;
+					i += argResult.length;
+				} else {
+					fixed += "{}";
+				}
+			} else {
+				fixed += char;
+				i++;
+			}
+		}
+
+		// Final brace balancing pass
+		let braceCount = 0;
+		let finalResult = "";
+		for (const char of fixed) {
 			if (char === "{") {
 				braceCount++;
 			} else if (char === "}") {
+				if (braceCount <= 0) continue; // Skip extra closing brace
 				braceCount--;
-				if (braceCount < 0) {
-					// Extra closing brace, remove it
-					continue; // Skip this brace
-				}
 			}
-
-			fixedResult += char;
+			finalResult += char;
 		}
-
-		// Add missing closing braces
 		if (braceCount > 0) {
-			fixedResult += "}".repeat(braceCount);
+			finalResult += "}".repeat(braceCount);
 		}
 
-		// Fix specific patterns that commonly cause issues
-		// Fix incomplete fractions: \frac{a}{b -> \frac{a}{b}
-		fixedResult = fixedResult.replace(/\\frac\{([^}]+)\}\{([^}]*)(?:\s*)$/g, "\\frac{$1}{$2}");
-
-		// Fix incomplete exponents: x^2 -> x^{2} if followed by operators
-		fixedResult = fixedResult.replace(/\^([a-zA-Z0-9])([+-/*=])/g, "^{$1}$2");
-
-		// Fix incomplete subscripts: x_2 -> x_{2} if followed by operators
-		fixedResult = fixedResult.replace(/_([a-zA-Z0-9])([+-/*=])/g, "_{$1}$2");
-
-		return fixedResult;
+		return finalResult;
 	}
 
 	processFractionNotation(str) {
-		// First fix any malformed nested fractions
-		// Fix: \frac{\frac{1}{2} + \frac{1}{3}{\frac{1}{4} + \frac{1}{5}
-		// This regex looks for \frac patterns with missing closing braces
-		str = str.replace(
-			/\\frac\{([^{}]+(?:\{[^{}]+\}[^{}]*)*)\}\{([^{}]+(?:\{[^{}]+\}[^{}]*)*)\b(?!\})/g,
-			(_match, num, den) => {
-				// Count braces in denominator
-				const openCount = (den.match(/\{/g) || []).length;
-				const closeCount = (den.match(/\}/g) || []).length;
-				if (openCount > closeCount) {
-					// Add missing closing braces
-					den += "}".repeat(openCount - closeCount);
+		// Fix malformed fractions by ensuring they have two braced arguments
+		str = str.replace(/\\frac(?![{[])/g, (match, offset) => {
+			const following = str.slice(offset + match.length);
+			// Check for content that needs to be wrapped in braces
+			const arg1Match = following.match(/^([^{[]|[\d\w]+)/);
+			if (arg1Match) {
+				const arg1 = arg1Match[0];
+				const rest = following.slice(arg1.length);
+				const arg2Match = rest.match(/^([^{[]|[\d\w]+)/);
+				if (arg2Match) {
+					const arg2 = arg2Match[0];
+					return `\\frac{${arg1}}{${arg2}}`;
 				}
-				return `\\frac{${num}}{${den}}`;
-			},
-		);
+			}
+			return match; // Return original if no fix is applied
+		});
 
 		// Fix missing braces around denominator like \frac{a}{b + c}d → wrap single token
 		str = str.replace(
@@ -757,16 +814,23 @@ function hasUnbalancedDelimiters(str) {
 			// Find the complete \\left command
 			let commandEnd = i + 5; // length of '\\left'
 
-			// Handle special cases like \\left\\{ or \\left\\lfloor
-			if (commandEnd + 1 < str.length && str[commandEnd] === "\\") {
-				// Skip to the end of the command
-				while (commandEnd < str.length && /[a-zA-Z]/.test(str[commandEnd + 1])) commandEnd++;
-				commandEnd++;
-			} else if (commandEnd < str.length) {
+			// Handle delimiter specified by a command, e.g., \left\{
+			if (commandEnd < str.length && str[commandEnd] === "\\") {
+				let cmdWordEnd = commandEnd + 1;
+				while (cmdWordEnd < str.length && str[cmdWordEnd].match(/[a-zA-Z]/)) {
+					cmdWordEnd++;
+				}
+				// If it's a command like \{, the command is the delimiter
+				if (cmdWordEnd > commandEnd + 1) {
+					commandEnd = cmdWordEnd;
+				} else {
+					// It's a single character escaped, like \|
+					commandEnd++;
+				}
+			} else if (commandEnd < str.length && "([{.| ".includes(str[commandEnd])) {
 				// Handle single character delimiters like (, [, {, |, .
 				commandEnd++;
 			}
-
 			const fullCommand = str.substring(i, commandEnd);
 			stack.push(fullCommand);
 			i = commandEnd - 1; // -1 because the loop will increment
@@ -778,12 +842,20 @@ function hasUnbalancedDelimiters(str) {
 			// Find the complete \\right command
 			let commandEnd = i + 6; // length of '\\right'
 
-			// Handle special cases like \\right\\} or \\right\\rfloor
-			if (commandEnd + 1 < str.length && str[commandEnd] === "\\") {
-				// Skip to the end of the command
-				while (commandEnd < str.length && /[a-zA-Z]/.test(str[commandEnd + 1])) commandEnd++;
-				commandEnd++;
-			} else if (commandEnd < str.length) {
+			// Handle delimiter specified by a command, e.g., \right\}
+			if (commandEnd < str.length && str[commandEnd] === "\\") {
+				let cmdWordEnd = commandEnd + 1;
+				while (cmdWordEnd < str.length && str[cmdWordEnd].match(/[a-zA-Z]/)) {
+					cmdWordEnd++;
+				}
+				// If it's a command like \}, the command is the delimiter
+				if (cmdWordEnd > commandEnd + 1) {
+					commandEnd = cmdWordEnd;
+				} else {
+					// It's a single character escaped, like \|
+					commandEnd++;
+				}
+			} else if (commandEnd < str.length && ")]}.| ".includes(str[commandEnd])) {
 				// Handle single character delimiters like ), ], }, |, .
 				commandEnd++;
 			}
