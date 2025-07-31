@@ -216,10 +216,13 @@ class CustomLatexParser {
 	simplify(tex) {
 		let simplified = tex;
 
+		// First, fix any structural issues
+		simplified = this.fixMalformedLatex(simplified);
+		
 		// Process fractions
 		simplified = this.processFractionNotation(simplified);
 
-		// Process nuclear notation BEFORE other replacements
+		// Process nuclear notation BEFORE text processing
 		simplified = this.processNuclearNotation(simplified);
 
 		// Process environments
@@ -229,6 +232,9 @@ class CustomLatexParser {
 		// Process arrows and symbols
 		simplified = this.processArrows(simplified);
 		simplified = this.processLimits(simplified);
+		simplified = this.processDerivatives(simplified);
+		
+		// Process text wrappers AFTER nuclear notation
 		simplified = this.processTextWrappers(simplified);
 		simplified = this.processTypoFixes(simplified);
 
@@ -238,8 +244,58 @@ class CustomLatexParser {
 
 		return simplified;
 	}
+	
+	fixMalformedLatex(str) {
+		// Fix common malformed patterns
+		
+		// Fix unclosed braces in fractions
+		let braceCount = 0;
+		let inFrac = false;
+		let result = '';
+		
+		for (let i = 0; i < str.length; i++) {
+			const char = str[i];
+			result += char;
+			
+			if (str.substr(i, 5) === '\\frac') {
+				inFrac = true;
+			}
+			
+			if (char === '{') {
+				braceCount++;
+			} else if (char === '}') {
+				braceCount--;
+				if (braceCount < 0) {
+					// Extra closing brace, remove it
+					result = result.slice(0, -1);
+					braceCount = 0;
+				}
+			}
+		}
+		
+		// Add missing closing braces
+		if (braceCount > 0) {
+			result += '}'.repeat(braceCount);
+		}
+		
+		return result;
+	}
 
 	processFractionNotation(str) {
+		// First fix any malformed nested fractions
+		// Fix: \frac{\frac{1}{2} + \frac{1}{3}{\frac{1}{4} + \frac{1}{5}
+		// This regex looks for \frac patterns with missing closing braces
+		str = str.replace(/\\frac\{([^{}]+(?:\{[^{}]+\}[^{}]*)*)\}\{([^{}]+(?:\{[^{}]+\}[^{}]*)*)\b(?!\})/g, (match, num, den) => {
+			// Count braces in denominator
+			let openCount = (den.match(/\{/g) || []).length;
+			let closeCount = (den.match(/\}/g) || []).length;
+			if (openCount > closeCount) {
+				// Add missing closing braces
+				den += '}}'.repeat(openCount - closeCount);
+			}
+			return `\\frac{${num}}{${den}}`;
+		});
+		
 		// rac{num}{den}
 		str = str.replace(/(?:\\f?rac|rac)\{([^}]+)\}\{([^}]+)\}/g, "\\frac{$1}{$2}");
 		// rac27 pattern
@@ -250,6 +306,17 @@ class CustomLatexParser {
 	}
 
 	processNuclearNotation(str) {
+		// Enhanced nuclear notation processing
+		
+		// Handle \text{{}^{A}N} patterns - remove \text wrapper for nuclear notation
+		str = str.replace(/\\text\{(\{\})?(\^\{[^}]+\})?(_\{[^}]+\})?([^}]*)\}/g, (match, empty, sup, sub, rest) => {
+			if (sup || sub) {
+				// This is nuclear notation inside \text{}, extract it
+				return `${empty || ''}${sup || ''}${sub || ''}\\text{${rest.trim()}}`;
+			}
+			return match;
+		});
+		
 		// Basic nuclear notation: \text{_Z^A X} -> {}^{A}_{Z}\text{X}
 		str = str.replace(/\\text\{_(\d+)\^(\d+)\s+([^}]+)\}/g, "{}^{$2}_{$1}\\text{$3}");
 
@@ -266,11 +333,16 @@ class CustomLatexParser {
 		str = str.replace(/\^\{([^}]+)\}\{([^}]+)\}\\text\{([^}]+)\}/g, "{}^{$1}_{$2}\\text{$3}");
 
 		// Handle the specific pattern from your examples: ^{A}{Z}\text{N}
-		str = str.replace(/\$\^\{([^}]+)\}\{([^}]+)\}\\text\{([^}]+)\}/g, "^{$1}_{$2}\\text{$3}");
+		str = str.replace(/\^\{([^}]+\})\{([^}]+)\}\\text\{([^}]+)\}/g, "{}^{$1}_{$2}\\text{$3}");
 
-		// e^- and e^+ outside \text{}
-		str = str.replace(/\\text\{e\^-\}/g, "e^{-}");
-		str = str.replace(/\\text\{e\^\+\}/g, "e^{+}");
+		// e^- and e^+ patterns - both inside and outside \text{}
+		str = str.replace(/\\text\{e\}\^([-+])/g, "e^{$1}");
+		str = str.replace(/\\text\{e\}\^\{([-+])\}/g, "e^{$1}");
+		str = str.replace(/\\text\{e\^([-+])\}/g, "e^{$1}");
+		str = str.replace(/\\text\{e\^\{([-+])\}\}/g, "e^{$1}");
+		
+		// Neutrino and antineutrino patterns
+		str = str.replace(/\\bar\{\\nu\}/g, "\\overline{\\nu}");
 
 		// Star notation for excited states
 		str = str.replace(/\\text\{([^}]+)\*\}/g, "\\text{$1}^*");
@@ -300,13 +372,31 @@ class CustomLatexParser {
 	}
 
 	processTextWrappers(str) {
-		// remove \text{} when content is purely math-friendly
+		// Enhanced \text{} processing
 		return str.replace(/\\text\{([^{}]+)\}/g, (m, inner) => {
-			// if inner has only simple math chars, drop the wrapper
+			// Special patterns that should be kept in \text{}
+			const keepPatterns = [
+				/^[A-Z]'?$/, // Single uppercase letter possibly with prime (e.g., N, N')
+				/^[a-z]'?$/, // Single lowercase letter possibly with prime
+				/^(He|Li|Be|C|N|O|F|Ne|Na|Mg|Al|Si|P|S|Cl|Ar|K|Ca)$/, // Chemical elements
+				/^e\^[+-]$/, // Electron/positron notation
+				/^\w+['*]?$/, // Words with possible prime or star
+			];
+			
+			// Check if we should keep \text{}
+			for (const pattern of keepPatterns) {
+				if (pattern.test(inner)) {
+					return `\\mathrm{${inner}}`; // Use \mathrm instead of \text
+				}
+			}
+			
+			// For simple math expressions, remove \text{}
 			if (/^[A-Za-z0-9_+\-*/=().,\s]+$/.test(inner)) {
 				return inner;
 			}
-			return m; // keep original
+			
+			// For everything else, convert to \mathrm
+			return `\\mathrm{${inner}}`;
 		});
 	}
 
@@ -314,10 +404,38 @@ class CustomLatexParser {
 		// fix common typos like infty -> \infty
 		return str.replace(/\binfty\b/g, "\\infty");
 	}
+	
+	processDerivatives(str) {
+		// Handle derivatives properly
+		// Convert d/dx patterns
+		str = str.replace(/\\frac\{d\}\{dx\}/g, "\\frac{\\mathrm{d}}{\\mathrm{d}x}");
+		
+		// Handle standalone d in derivatives (but not in other contexts)
+		str = str.replace(/\b([dfgh])\(x\)/g, "$1(x)"); // Keep function names as-is
+		str = str.replace(/\bd([xy])/g, "\\mathrm{d}$1"); // Convert dx, dy to \mathrm{d}x
+		str = str.replace(/([dfgh])'\(x\)/g, "$1'(x)"); // Keep derivative notation
+		
+		return str;
+	}
 
 	processLimits(str) {
 		// Fix "lim_{x o infty}" -> "lim_{x \to \infty}"
 		str = str.replace(/lim_\{([^}]+)\s+o\s+([^}]+)\}/g, "\\lim_{$1 \\to $2}");
+		// Fix standalone "lim" -> "\lim"
+		str = str.replace(/\blim\b/g, "\\lim");
+		return str;
+	}
+	
+	processDerivatives(str) {
+		// Handle derivatives properly
+		// Convert d/dx patterns
+		str = str.replace(/\\frac\{d\}\{dx\}/g, "\\frac{\\mathrm{d}}{\\mathrm{d}x}");
+		
+		// Handle standalone d in derivatives (but not in other contexts)
+		str = str.replace(/\b([dfgh])\(x\)/g, "$1(x)"); // Keep function names as-is
+		str = str.replace(/\bd([xy])/g, "\\mathrm{d}$1"); // Convert dx, dy to \mathrm{d}x
+		str = str.replace(/([dfgh])'\(x\)/g, "$1'(x)"); // Keep derivative notation
+		
 		return str;
 	}
 

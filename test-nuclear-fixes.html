@@ -1,0 +1,188 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>WebTeX Nuclear Notation Test</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            max-width: 1000px;
+            margin: 0 auto;
+            padding: 20px;
+            line-height: 1.6;
+        }
+        .test-section {
+            background: #f9f9f9;
+            padding: 20px;
+            margin: 20px 0;
+            border-left: 4px solid #007cba;
+            border-radius: 4px;
+        }
+        .status {
+            padding: 15px;
+            margin: 20px 0;
+            border-radius: 8px;
+            font-weight: bold;
+        }
+        .success {
+            background-color: #d4edda;
+            color: #155724;
+            border: 1px solid #c3e6cb;
+        }
+        .error {
+            background-color: #f8d7da;
+            color: #721c24;
+            border: 1px solid #f5c6cb;
+        }
+        .math-test {
+            margin: 10px 0;
+            padding: 10px;
+            background: white;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+        }
+        .math-test h4 {
+            margin: 0 0 10px 0;
+            color: #666;
+            font-size: 14px;
+        }
+        .expected {
+            color: #666;
+            font-size: 12px;
+            margin-top: 5px;
+        }
+    </style>
+</head>
+<body>
+    <h1>WebTeX Nuclear Notation Fix Test</h1>
+    
+    <div id="status" class="status error">Loading...</div>
+
+    <div class="test-section">
+        <h2>Nuclear Decay Equations</h2>
+        
+        <div class="math-test">
+            <h4>General Alpha Decay:</h4>
+            $\text{{}^{A}N} \rightarrow {}{}^{A-4}_{Z-2}\text{N'} + {}{}^{4}_{2}He$
+            <div class="expected">Should show: ᴬN → ᴬ⁻⁴N' + ⁴He with proper subscripts/superscripts</div>
+        </div>
+
+        <div class="math-test">
+            <h4>Beta Minus Decay:</h4>
+            $\text{{}^{A}N} \rightarrow {}{}^{A}_{Z+1}\text{N'} + e^{-} + \bar{\nu}$
+            <div class="expected">Should show: ᴬN → ᴬN' + e⁻ + ν̄ with proper formatting</div>
+        </div>
+
+        <div class="math-test">
+            <h4>Beta Plus Decay:</h4>
+            $\text{{}^{A}N} \rightarrow {}{}^{A}_{Z-1}\text{N'} + e^{+} + \nu$
+            <div class="expected">Should show: ᴬN → ᴬN' + e⁺ + ν with proper formatting</div>
+        </div>
+
+        <div class="math-test">
+            <h4>Electron Capture:</h4>
+            $\text{{}^{A}N} + e^{-} \rightarrow {}{}^{A}_{Z-1}\text{N'} + \nu$
+            <div class="expected">Should show: ᴬN + e⁻ → ᴬN' + ν with proper formatting</div>
+        </div>
+
+        <div class="math-test">
+            <h4>Alternative Beta-Minus Notation:</h4>
+            $^{A}{Z}\text{N} \rightarrow ^{A}{Z+1}\text{N'} + \text{e}^- + \bar{\nu}$
+            <div class="expected">Should show same as beta minus decay above</div>
+        </div>
+
+        <div class="math-test">
+            <h4>Alternative Beta-Plus Notation:</h4>
+            $^{A}{Z}\text{N} \rightarrow ^{A}{Z-1}\text{N'} + \text{e}^+ + \nu$
+            <div class="expected">Should show same as beta plus decay above</div>
+        </div>
+    </div>
+
+    <div class="test-section">
+        <h2>Fraction Tests</h2>
+        
+        <div class="math-test">
+            <h4>Complex Nested Fraction (Malformed):</h4>
+            $\frac{\frac{1}{2} + \frac{1}{3}{\frac{1}{4} + \frac{1}{5} = \frac{50}{27}$
+            <div class="expected">Should show: ((1/2 + 1/3) / (1/4 + 1/5)) = 50/27</div>
+        </div>
+
+        <div class="math-test">
+            <h4>Correct Nested Fraction:</h4>
+            $\frac{\frac{1}{2} + \frac{1}{3}}{\frac{1}{4} + \frac{1}{5}} = \frac{50}{27}$
+            <div class="expected">Should show: ((1/2 + 1/3) / (1/4 + 1/5)) = 50/27</div>
+        </div>
+    </div>
+
+    <div class="test-section">
+        <h2>Derivative Tests</h2>
+        
+        <div class="math-test">
+            <h4>Derivative with bracket notation:</h4>
+            $\frac{d}{dx}[g(x)] = d$
+            <div class="expected">Should show: d/dx[g(x)] = d with proper formatting</div>
+        </div>
+
+        <div class="math-test">
+            <h4>Functions with derivatives:</h4>
+            $g(x) = dx + e$ and $h(x) = f(x) \cdot g(x)$
+            <div class="expected">Should show: g(x) = dx + e and h(x) = f(x) · g(x)</div>
+        </div>
+
+        <div class="math-test">
+            <h4>Prime notation:</h4>
+            $f'(x) = 3x^2$
+            <div class="expected">Should show: f'(x) = 3x²</div>
+        </div>
+    </div>
+
+    <script>
+        // Auto-enable for testing
+        (async function() {
+            if (typeof chrome !== 'undefined' && chrome.storage) {
+                try {
+                    const domain = location.hostname || 'localhost';
+                    const result = await chrome.storage.local.get('allowedDomains');
+                    const domains = result.allowedDomains || [];
+                    
+                    if (!domains.includes(domain)) {
+                        domains.push(domain);
+                        await chrome.storage.local.set({ allowedDomains: domains });
+                        console.log('Added domain to allowed list:', domain);
+                    }
+                } catch (e) {
+                    console.log('Could not auto-enable (normal for file:// protocol)');
+                }
+            }
+        })();
+
+        // Status checker
+        function updateStatus() {
+            const status = document.getElementById('status');
+            const hasRendererState = window.rendererState;
+            const hasKatexElements = document.querySelectorAll('.katex, .webtex-katex-rendered, .webtex-custom-rendered').length > 0;
+            const hasWebTexCSS = document.querySelector('style[id*="webtex"]');
+            
+            if (hasRendererState || hasKatexElements || hasWebTexCSS) {
+                const stats = window.rendererState || {};
+                const total = stats.totalAttempts || 0;
+                const success = (stats.katexSuccess || 0) + (stats.customParserFallback || 0);
+                const rate = total > 0 ? (success / total * 100).toFixed(1) : '0';
+                
+                status.className = 'status success';
+                status.innerHTML = `✅ WebTeX Active | Total: ${total} | Success: ${success} (${rate}%) | KaTeX: ${stats.katexSuccess || 0} | Custom: ${stats.customParserFallback || 0}`;
+            } else {
+                status.className = 'status error';
+                status.innerHTML = '❌ WebTeX not detected or not active';
+            }
+        }
+
+        // Update status periodically
+        setInterval(updateStatus, 2000);
+        setTimeout(updateStatus, 1000);
+
+        console.log('WebTeX Nuclear Notation Test Page Loaded');
+    </script>
+</body>
+</html>
