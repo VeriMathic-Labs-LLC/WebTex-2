@@ -292,6 +292,20 @@ const rendererState = {
 // Expose renderer state globally for debugging
 window.rendererState = rendererState;
 
+// Collect KaTeX parse errors for debugging
+window.webtexErrors = [];
+function reportKaTeXError(tex, error) {
+	const message = error?.message || (typeof error === "string" ? error : "Unknown KaTeX error");
+	window.webtexErrors.push({ tex, message, time: Date.now() });
+	console.warn("[WebTeX] KaTeX parse error:", message, "in", tex);
+
+	// Dispatch a custom event for external listeners/devtools panels
+	try {
+		const evt = new CustomEvent("webtex-katex-error", { detail: { tex, message } });
+		document.dispatchEvent(evt);
+	} catch (_) {}
+}
+
 /* -------------------------------------------------- */
 // Enhanced Custom LaTeX Parser for edge cases
 class CustomLatexParser {
@@ -560,6 +574,10 @@ class CustomLatexParser {
 		// Handle derivatives properly
 		// Convert d/dx patterns
 		str = str.replace(/\\frac\{d\}\{dx\}/g, "\\frac{\\mathrm{d}}{\\mathrm{d}x}");
+		str = str.replace(
+			/\\frac\\{\\mathrm\\{d\\}([^}]*)\\{\\mathrm\\{d\\}x/g,
+			"\\frac{\\mathrm{d}}{\\mathrm{d}x}",
+		);
 
 		// Handle standalone d in derivatives (but not in other contexts)
 		str = str.replace(/\b([dfgh])\(x\)/g, "$1(x)"); // Keep function names as-is
@@ -599,9 +617,35 @@ class CustomLatexParser {
 const customParser = new CustomLatexParser();
 
 /* -------------------------------------------------- */
+// Utility: quick delimiter balance check
+function hasUnbalancedDelimiters(str) {
+	const pairs = { "{": "}", "(": ")", "[": "]" };
+	const stack = [];
+	for (const ch of str) {
+		if (pairs[ch]) {
+			stack.push(pairs[ch]);
+		} else if (Object.values(pairs).includes(ch)) {
+			if (stack.pop() !== ch) return true;
+		}
+	}
+	return stack.length !== 0;
+}
+
+/* -------------------------------------------------- */
 // Enhanced rendering function with intelligent fallback
 async function renderMathExpression(tex, displayMode = false, element = null) {
 	rendererState.totalAttempts++;
+
+	// Skip obviously malformed input to avoid KaTeX noise
+	if (hasUnbalancedDelimiters(tex)) {
+		if (element) {
+			const fb = customParser.renderFallback(tex, displayMode);
+			element.innerHTML = "";
+			element.appendChild(fb);
+			element.classList.add("webtex-error-fallback");
+		}
+		return { success: false, method: "unbalanced", element };
+	}
 
 	// Try KaTeX first
 	try {
@@ -612,12 +656,27 @@ async function renderMathExpression(tex, displayMode = false, element = null) {
 		}
 		processedTex = handleUnicodeInMath(processedTex);
 
+		// Dynamic KaTeX security/strict handlers
+		const trustHandler = (ctx) => {
+			// Allow href/url with safe protocols only; block others
+			if (["\\href", "\\url"].includes(ctx.command)) {
+				return ["http", "https", "_relative", "mailto"].includes(ctx.protocol);
+			}
+			return false; // Disallow everything else by default
+		};
+
+		const strictHandler = (errorCode, errorMsg, _token) => {
+			// Collect strict warnings as well
+			reportKaTeXError(tex, `${errorCode}: ${errorMsg}`);
+			return "ignore"; // Do not throw; continue rendering
+		};
+
 		const katexOptions = {
 			displayMode: displayMode,
-			throwOnError: false,
+			throwOnError: true, // Throw to capture parse errors
 			errorColor: "inherit",
-			strict: false, // Disable strict mode to reduce warnings
-			trust: true, // Trust input to allow more features
+			strict: strictHandler,
+			trust: trustHandler,
 			macros: {
 				"\\RR": "\\mathbb{R}",
 				"\\NN": "\\mathbb{N}",
@@ -647,7 +706,9 @@ async function renderMathExpression(tex, displayMode = false, element = null) {
 		}
 
 		return { success: true, method: "katex", element: element };
-	} catch (_katexError) {
+	} catch (katexError) {
+		// Capture and log KaTeX parse error
+		reportKaTeXError(tex, katexError);
 		// Try custom parser as fallback
 		if (customParser.canHandle(tex)) {
 			try {
@@ -982,10 +1043,21 @@ async function enableRendering() {
 				return;
 			}
 
-			muts
-				.flatMap((m) => [...m.addedNodes])
-				.filter((n) => n.nodeType === 1 && !n.closest(".webtex-ignore"))
-				.forEach(safeRender);
+			muts;
+			muts.forEach((m) => {
+				// Process the mutation target itself (covers character data changes)
+				safeRender(m.target);
+
+				// Handle added nodes (elements OR text)
+				m.addedNodes.forEach((n) => {
+					if (n.nodeType === 3) {
+						// Text node – re-render its parent
+						safeRender(n.parentNode || document.body);
+					} else if (n.nodeType === 1 && !n.closest(".webtex-ignore")) {
+						safeRender(n);
+					}
+				});
+			});
 		}, 200),
 	);
 
