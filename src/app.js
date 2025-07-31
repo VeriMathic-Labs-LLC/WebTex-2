@@ -131,6 +131,14 @@ async function injectCSS() {
 	font-style: normal;
 }
 @font-face {
+	font-family: 'KaTeX_Main';
+	src: url('${chrome.runtime.getURL("katex/fonts/KaTeX_Main-Bold.woff2")}') format('woff2'),
+			 url('${chrome.runtime.getURL("katex/fonts/KaTeX_Main-Bold.woff")}') format('woff'),
+			 url('${chrome.runtime.getURL("katex/fonts/KaTeX_Main-Bold.ttf")}') format('truetype');
+	font-weight: bold;
+	font-style: normal;
+}
+@font-face {
 	font-family: 'KaTeX_Math';
 	src: url('${chrome.runtime.getURL("katex/fonts/KaTeX_Math-Italic.woff2")}') format('woff2'),
 			 url('${chrome.runtime.getURL("katex/fonts/KaTeX_Math-Italic.woff")}') format('woff'),
@@ -782,17 +790,20 @@ async function safeRender(root = document.body) {
 		if (expressions.length > 0) {
 			await processMathExpressions(expressions);
 
-			// Log rendering statistics
-			console.log("WebTeX: Rendering complete", {
-				total: rendererState.totalAttempts,
-				katex: rendererState.katexSuccess,
-				custom: rendererState.customParserFallback,
-				successRate: `${(
-					((rendererState.katexSuccess + rendererState.customParserFallback) /
-						rendererState.totalAttempts) *
-						100
-				).toFixed(1)}%`,
-			});
+			// Log rendering statistics (throttled to prevent spam)
+			if (!window.webTexLastLogTime || Date.now() - window.webTexLastLogTime > 5000) {
+				console.log("WebTeX: Rendering complete", {
+					total: rendererState.totalAttempts,
+					katex: rendererState.katexSuccess,
+					custom: rendererState.customParserFallback,
+					successRate: `${(
+						((rendererState.katexSuccess + rendererState.customParserFallback) /
+							rendererState.totalAttempts) *
+							100
+					).toFixed(1)}%`,
+				});
+				window.webTexLastLogTime = Date.now();
+			}
 		}
 	} catch (e) {
 		console.error("WebTeX: Error during rendering", e);
