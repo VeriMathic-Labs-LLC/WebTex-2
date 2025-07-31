@@ -116,10 +116,17 @@ async function injectCSS() {
 		const response = await fetch(katexCssUrl);
 		const katexCssContent = await response.text();
 
+		// Rewrite relative font paths to absolute extension URLs
+		const baseFontPath = chrome.runtime.getURL("katex/fonts/");
+		const fixedKatexCss = katexCssContent.replace(
+			/url\((['"]?)fonts\//g,
+			(_match, quote) => `url(${quote}${baseFontPath}`,
+		);
+
 		const katexStyle = document.createElement("style");
 		katexStyle.id = "webtex-katex-styles";
 		katexStyle.textContent =
-			katexCssContent +
+			fixedKatexCss +
 			`
 /* WebTeX Font Path Fixes */
 @font-face {
