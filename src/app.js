@@ -18,50 +18,15 @@ function decodeHTMLEntities(text) {
 /* -------------------------------------------------- */
 let observer = null;
 let isEnabled = false;
-let mathjaxLoaded = false;
 let katexLoaded = true; // KaTeX is bundled
 let rendererState = {
   katexSuccess: 0,
-  mathjaxFallback: 0,
   customParserFallback: 0,
   totalAttempts: 0
 };
 
 // Expose renderer state globally for debugging
 window.rendererState = rendererState;
-
-// Enhanced MathJax configuration
-window.MathJax = {
-  tex: {
-    inlineMath: [['$', '$'], ['\\(', '\\)']],
-    displayMath: [['$$', '$$'], ['\\[', '\\]']],
-    processEscapes: true,
-    processEnvironments: true
-  },
-  options: {
-    skipHtmlTags: ['script', 'noscript', 'style', 'textarea', 'pre', 'code', 'input', 'select', 'button'],
-    ignoreHtmlClass: 'webtex-ignore',
-    processHtmlClass: 'webtex-process'
-  },
-  startup: {
-    typeset: false,
-    ready: () => {
-      mathjaxLoaded = true;
-      console.log('WebTeX: MathJax is ready for fallback rendering.');
-      if (isEnabled) {
-        safeRender();
-      }
-      window.MathJax.startup.defaultReady();
-    }
-  }
-};
-
-// Load MathJax for fallback
-const script = document.createElement('script');
-script.type = 'text/javascript';
-script.src = chrome.runtime.getURL('mathjax/es5/tex-chtml-full.js');
-script.async = true;
-document.head.appendChild(script);
 
 /* -------------------------------------------------- */
 // Enhanced Custom LaTeX Parser for edge cases
@@ -101,6 +66,16 @@ class CustomLatexParser {
       return true;
     }
     
+    // Handle equation environments
+    if (tex.includes('\\begin{equation}') || tex.includes('\\end{equation}')) {
+      return true;
+    }
+    
+    // Handle any LaTeX that might fail in KaTeX
+    if (tex.includes('\\to') || tex.includes('\\rightarrow')) {
+      return true;
+    }
+    
     return false;
   }
 
@@ -113,6 +88,9 @@ class CustomLatexParser {
     
     // Handle fraction notation
     simplified = this.processFractionNotation(simplified);
+    
+    // Handle equation environments
+    simplified = this.processEquationEnvironments(simplified);
     
     // Replace problematic environments with simpler alternatives
     simplified = simplified.replace(/\\begin\{align\}/g, '\\begin{aligned}');
@@ -155,7 +133,7 @@ class CustomLatexParser {
     processed = processed.replace(/\\gamma/g, '\\gamma');
     
     // Handle half-life notation
-    processed = processed.replace(/T_\{1/2\}/g, 'T_{1/2}');
+    processed = processed.replace(/T_\{1\/2\}/g, 'T_{1/2}');
     
     return processed;
   }
@@ -169,6 +147,20 @@ class CustomLatexParser {
     
     // Handle simple rac notation
     processed = processed.replace(/rac(\d+)/g, '\\frac{$1}{1}');
+    
+    return processed;
+  }
+
+  // Process equation environments
+  processEquationEnvironments(tex) {
+    let processed = tex;
+    
+    // Remove equation environment wrappers and keep the content
+    processed = processed.replace(/\\begin\{equation\}([\s\S]*?)\\end\{equation\}/g, '$1');
+    
+    // Handle any remaining equation tags
+    processed = processed.replace(/\\begin\{equation\}/g, '');
+    processed = processed.replace(/\\end\{equation\}/g, '');
     
     return processed;
   }
@@ -240,32 +232,20 @@ async function renderMathExpression(tex, displayMode = false, element = null) {
     
     return { success: true, method: 'katex', element: element };
   } catch (katexError) {
-    console.debug('WebTeX: KaTeX failed, trying MathJax fallback:', katexError.message);
+    console.debug('WebTeX: KaTeX failed, trying custom parser:', katexError.message);
     
-    // Try MathJax fallback
-    if (mathjaxLoaded) {
-      try {
-        if (element) {
-          element.className = 'mj';
-          element.innerHTML = displayMode ? `\\[${tex}\\]` : `\\(${tex}\\)`;
-          
-          await window.MathJax.typesetPromise([element]);
-          rendererState.mathjaxFallback++;
-          element.classList.add('webtex-mathjax-rendered');
-          
-          return { success: true, method: 'mathjax', element: element };
-        }
-      } catch (mathjaxError) {
-        console.debug('WebTeX: MathJax fallback failed:', mathjaxError.message);
-      }
-    }
-    
-    // Try custom parser as last resort
+    // Try custom parser as fallback
     if (customParser.canHandle(tex)) {
       try {
         const simplified = customParser.simplify(tex);
         const processedSimplified = handleUnicodeInMath(simplified);
-        const rendered = katex.renderToString(processedSimplified, { displayMode, throwOnError: false });
+        const rendered = katex.renderToString(processedSimplified, { 
+          displayMode, 
+          throwOnError: false,
+          errorColor: 'inherit',
+          strict: false,
+          trust: true
+        });
         
         if (element) {
           element.innerHTML = rendered;
@@ -483,9 +463,8 @@ async function safeRender(root = document.body) {
       console.log('WebTeX: Rendering complete', {
         total: rendererState.totalAttempts,
         katex: rendererState.katexSuccess,
-        mathjax: rendererState.mathjaxFallback,
         custom: rendererState.customParserFallback,
-        successRate: ((rendererState.katexSuccess + rendererState.mathjaxFallback + rendererState.customParserFallback) / rendererState.totalAttempts * 100).toFixed(1) + '%'
+        successRate: ((rendererState.katexSuccess + rendererState.customParserFallback) / rendererState.totalAttempts * 100).toFixed(1) + '%'
       });
     }
   } catch (e) {
@@ -577,13 +556,9 @@ function disableRendering() {
     observer = null;
   }
   
-  if (window.MathJax && window.MathJax.typesetClear) {
-    window.MathJax.typesetClear();
-  }
-  
   // Clear KaTeX rendered elements
-  document.querySelectorAll('.webtex-katex-rendered, .webtex-mathjax-rendered, .webtex-custom-rendered').forEach(el => {
-    el.classList.remove('webtex-katex-rendered', 'webtex-mathjax-rendered', 'webtex-custom-rendered');
+  document.querySelectorAll('.webtex-katex-rendered, .webtex-custom-rendered').forEach(el => {
+    el.classList.remove('webtex-katex-rendered', 'webtex-custom-rendered');
   });
 }
 
