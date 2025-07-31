@@ -895,6 +895,8 @@ function preprocessMathText(node) {
       // Text node
       let text = child.textContent;
       text = decodeHTMLEntities(text);
+      // Normalize nuclear notation sequences so KaTeX can parse them
+      text = customParser.processNuclearNotation(text);
 
       // Enhanced environment handling
       text = text.replace(
