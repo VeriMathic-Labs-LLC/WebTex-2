@@ -6,11 +6,14 @@ import katex from "katex";
 // CSS injection management
 let injectedStylesheets = [];
 
-function injectCSS() {
+async function injectCSS() {
 	if (injectedStylesheets.length > 0) return; // Already injected
 
-	// Get CSS content dynamically
-	const appCssContent = `/* WebTeX Extension Styles - Scoped to extension elements only */
+	try {
+		// Inject app.css
+		const appStyle = document.createElement("style");
+		appStyle.id = "webtex-app-styles";
+		appStyle.textContent = `/* WebTeX Extension Styles - Scoped to extension elements only */
 
 /* WebTeX Enhanced Styling with proper color inheritance */
 .webtex-math-container {
@@ -105,49 +108,135 @@ function injectCSS() {
 .webtex-custom-rendered {
 	color: inherit !important;
 }`;
+		document.head.appendChild(appStyle);
+		injectedStylesheets.push(appStyle);
 
-	// Inject app.css
-	const appStyle = document.createElement("style");
-	appStyle.id = "webtex-app-styles";
-	appStyle.textContent = appCssContent;
-	document.head.appendChild(appStyle);
-	injectedStylesheets.push(appStyle);
+		// Fetch and inject KaTeX CSS directly
+		const katexCssUrl = chrome.runtime.getURL("katex/katex.min.css");
+		const response = await fetch(katexCssUrl);
+		const katexCssContent = await response.text();
 
-	// Inject KaTeX CSS with font fixes
-	const katexStyle = document.createElement("style");
-	katexStyle.id = "webtex-katex-styles";
-	katexStyle.textContent = `/* KaTeX Styles */
-@import url('chrome-extension://${chrome.runtime.id}/katex/katex.min.css');
-
+		const katexStyle = document.createElement("style");
+		katexStyle.id = "webtex-katex-styles";
+		katexStyle.textContent =
+			katexCssContent +
+			`
 /* WebTeX Font Path Fixes */
 @font-face {
 	font-family: 'KaTeX_Main';
-	src: url('chrome-extension://${chrome.runtime.id}/katex/fonts/KaTeX_Main-Regular.woff2') format('woff2'),
-			 url('chrome-extension://${chrome.runtime.id}/katex/fonts/KaTeX_Main-Regular.woff') format('woff'),
-			 url('chrome-extension://${chrome.runtime.id}/katex/fonts/KaTeX_Main-Regular.ttf') format('truetype');
+	src: url('${chrome.runtime.getURL("katex/fonts/KaTeX_Main-Regular.woff2")}') format('woff2'),
+			 url('${chrome.runtime.getURL("katex/fonts/KaTeX_Main-Regular.woff")}') format('woff'),
+			 url('${chrome.runtime.getURL("katex/fonts/KaTeX_Main-Regular.ttf")}') format('truetype');
 	font-weight: normal;
 	font-style: normal;
 }
 @font-face {
 	font-family: 'KaTeX_Math';
-	src: url('chrome-extension://${chrome.runtime.id}/katex/fonts/KaTeX_Math-Italic.woff2') format('woff2'),
-			 url('chrome-extension://${chrome.runtime.id}/katex/fonts/KaTeX_Math-Italic.woff') format('woff'),
-			 url('chrome-extension://${chrome.runtime.id}/katex/fonts/KaTeX_Math-Italic.ttf') format('truetype');
+	src: url('${chrome.runtime.getURL("katex/fonts/KaTeX_Math-Italic.woff2")}') format('woff2'),
+			 url('${chrome.runtime.getURL("katex/fonts/KaTeX_Math-Italic.woff")}') format('woff'),
+			 url('${chrome.runtime.getURL("katex/fonts/KaTeX_Math-Italic.ttf")}') format('truetype');
 	font-weight: normal;
 	font-style: italic;
 }
 @font-face {
 	font-family: 'KaTeX_AMS';
-	src: url('chrome-extension://${chrome.runtime.id}/katex/fonts/KaTeX_AMS-Regular.woff2') format('woff2'),
-			 url('chrome-extension://${chrome.runtime.id}/katex/fonts/KaTeX_AMS-Regular.woff') format('woff'),
-			 url('chrome-extension://${chrome.runtime.id}/katex/fonts/KaTeX_AMS-Regular.ttf') format('truetype');
+	src: url('${chrome.runtime.getURL("katex/fonts/KaTeX_AMS-Regular.woff2")}') format('woff2'),
+			 url('${chrome.runtime.getURL("katex/fonts/KaTeX_AMS-Regular.woff")}') format('woff'),
+			 url('${chrome.runtime.getURL("katex/fonts/KaTeX_AMS-Regular.ttf")}') format('truetype');
+	font-weight: normal;
+	font-style: normal;
+}
+@font-face {
+	font-family: 'KaTeX_Caligraphic';
+	src: url('${chrome.runtime.getURL("katex/fonts/KaTeX_Caligraphic-Regular.woff2")}') format('woff2'),
+			 url('${chrome.runtime.getURL("katex/fonts/KaTeX_Caligraphic-Regular.woff")}') format('woff'),
+			 url('${chrome.runtime.getURL("katex/fonts/KaTeX_Caligraphic-Regular.ttf")}') format('truetype');
+	font-weight: normal;
+	font-style: normal;
+}
+@font-face {
+	font-family: 'KaTeX_Fraktur';
+	src: url('${chrome.runtime.getURL("katex/fonts/KaTeX_Fraktur-Regular.woff2")}') format('woff2'),
+			 url('${chrome.runtime.getURL("katex/fonts/KaTeX_Fraktur-Regular.woff")}') format('woff'),
+			 url('${chrome.runtime.getURL("katex/fonts/KaTeX_Fraktur-Regular.ttf")}') format('truetype');
+	font-weight: normal;
+	font-style: normal;
+}
+@font-face {
+	font-family: 'KaTeX_SansSerif';
+	src: url('${chrome.runtime.getURL("katex/fonts/KaTeX_SansSerif-Regular.woff2")}') format('woff2'),
+			 url('${chrome.runtime.getURL("katex/fonts/KaTeX_SansSerif-Regular.woff")}') format('woff'),
+			 url('${chrome.runtime.getURL("katex/fonts/KaTeX_SansSerif-Regular.ttf")}') format('truetype');
+	font-weight: normal;
+	font-style: normal;
+}
+@font-face {
+	font-family: 'KaTeX_Script';
+	src: url('${chrome.runtime.getURL("katex/fonts/KaTeX_Script-Regular.woff2")}') format('woff2'),
+			 url('${chrome.runtime.getURL("katex/fonts/KaTeX_Script-Regular.woff")}') format('woff'),
+			 url('${chrome.runtime.getURL("katex/fonts/KaTeX_Script-Regular.ttf")}') format('truetype');
+	font-weight: normal;
+	font-style: normal;
+}
+@font-face {
+	font-family: 'KaTeX_Typewriter';
+	src: url('${chrome.runtime.getURL("katex/fonts/KaTeX_Typewriter-Regular.woff2")}') format('woff2'),
+			 url('${chrome.runtime.getURL("katex/fonts/KaTeX_Typewriter-Regular.woff")}') format('woff'),
+			 url('${chrome.runtime.getURL("katex/fonts/KaTeX_Typewriter-Regular.ttf")}') format('truetype');
+	font-weight: normal;
+	font-style: normal;
+}
+@font-face {
+	font-family: 'KaTeX_Size1';
+	src: url('${chrome.runtime.getURL("katex/fonts/KaTeX_Size1-Regular.woff2")}') format('woff2'),
+			 url('${chrome.runtime.getURL("katex/fonts/KaTeX_Size1-Regular.woff")}') format('woff'),
+			 url('${chrome.runtime.getURL("katex/fonts/KaTeX_Size1-Regular.ttf")}') format('truetype');
+	font-weight: normal;
+	font-style: normal;
+}
+@font-face {
+	font-family: 'KaTeX_Size2';
+	src: url('${chrome.runtime.getURL("katex/fonts/KaTeX_Size2-Regular.woff2")}') format('woff2'),
+			 url('${chrome.runtime.getURL("katex/fonts/KaTeX_Size2-Regular.woff")}') format('woff'),
+			 url('${chrome.runtime.getURL("katex/fonts/KaTeX_Size2-Regular.ttf")}') format('truetype');
+	font-weight: normal;
+	font-style: normal;
+}
+@font-face {
+	font-family: 'KaTeX_Size3';
+	src: url('${chrome.runtime.getURL("katex/fonts/KaTeX_Size3-Regular.woff2")}') format('woff2'),
+			 url('${chrome.runtime.getURL("katex/fonts/KaTeX_Size3-Regular.woff")}') format('woff'),
+			 url('${chrome.runtime.getURL("katex/fonts/KaTeX_Size3-Regular.ttf")}') format('truetype');
+	font-weight: normal;
+	font-style: normal;
+}
+@font-face {
+	font-family: 'KaTeX_Size4';
+	src: url('${chrome.runtime.getURL("katex/fonts/KaTeX_Size4-Regular.woff2")}') format('woff2'),
+			 url('${chrome.runtime.getURL("katex/fonts/KaTeX_Size4-Regular.woff")}') format('woff'),
+			 url('${chrome.runtime.getURL("katex/fonts/KaTeX_Size4-Regular.ttf")}') format('truetype');
 	font-weight: normal;
 	font-style: normal;
 }`;
-	document.head.appendChild(katexStyle);
-	injectedStylesheets.push(katexStyle);
+		document.head.appendChild(katexStyle);
+		injectedStylesheets.push(katexStyle);
 
-	console.log("WebTeX: Stylesheets injected");
+		console.log("WebTeX: Stylesheets injected successfully");
+	} catch (error) {
+		console.error("WebTeX: Error injecting CSS:", error);
+
+		// Fallback: inject minimal CSS
+		const fallbackStyle = document.createElement("style");
+		fallbackStyle.id = "webtex-fallback-styles";
+		fallbackStyle.textContent = `
+.katex { color: inherit !important; font-size: 1.1em; }
+.katex-display { color: inherit !important; margin: 1em 0; }
+.webtex-katex-rendered, .webtex-custom-rendered { color: inherit !important; }
+`;
+		document.head.appendChild(fallbackStyle);
+		injectedStylesheets.push(fallbackStyle);
+		console.log("WebTeX: Fallback styles injected");
+	}
 }
 
 function removeCSS() {
@@ -250,6 +339,15 @@ class CustomLatexParser {
 	}
 
 	processNuclearNotation(str) {
+		// Handle the problematic pattern: \text{{}^{A}N} -> {}^{A}\text{N}
+		str = str.replace(/\\text\{\{\}\^\{([^}]+)\}([^}]+)\}/g, "{}^{$1}\\text{$2}");
+
+		// Handle nested braces with subscripts: \text{{}^{A}_{Z}N} -> {}^{A}_{Z}\text{N}
+		str = str.replace(/\\text\{\{\}\^\{([^}]+)\}_\{([^}]+)\}([^}]+)\}/g, "{}^{$1}_{$2}\\text{$3}");
+
+		// Handle patterns like: {}{}^{A-4}_{Z-2}\text{N'} -> {}^{A-4}_{Z-2}\text{N'}
+		str = str.replace(/\{\}\{\}\^\{([^}]+)\}_\{([^}]+)\}/g, "{}^{$1}_{$2}");
+
 		// Basic nuclear notation: \text{_Z^A X} -> {}^{A}_{Z}\text{X}
 		str = str.replace(/\\text\{_(\d+)\^(\d+)\s+([^}]+)\}/g, "{}^{$2}_{$1}\\text{$3}");
 
@@ -312,7 +410,44 @@ class CustomLatexParser {
 
 	processTypoFixes(str) {
 		// fix common typos like infty -> \infty
-		return str.replace(/\binfty\b/g, "\\infty");
+		str = str.replace(/\binfty\b/g, "\\infty");
+
+		// Fix limit arrow typos: \to -> \rightarrow
+		str = str.replace(/\\to\b/g, "\\rightarrow");
+
+		// Fix missing braces in limits: \lim_{x o infty} -> \lim_{x \to \infty}
+		str = str.replace(/\\lim_\{([^}]*)\s+o\s+infty\}/g, "\\lim_{$1 \\to \\infty}");
+
+		// Fix unmatched braces in expressions
+		str = this.fixUnmatchedBraces(str);
+
+		return str;
+	}
+
+	fixUnmatchedBraces(str) {
+		let result = str;
+		let openCount = 0;
+		const chars = result.split("");
+
+		// Count and fix missing closing braces
+		for (let i = 0; i < chars.length; i++) {
+			if (chars[i] === "{") {
+				openCount++;
+			} else if (chars[i] === "}") {
+				openCount--;
+			}
+		}
+
+		// Add missing closing braces
+		while (openCount > 0) {
+			result += "}";
+			openCount--;
+		}
+
+		// Remove extra closing braces (simple approach)
+		result = result.replace(/\}\}+/g, "}");
+
+		return result;
 	}
 
 	processLimits(str) {
@@ -689,11 +824,11 @@ async function safeRender(root = document.body) {
 	);
 
 	if (isEnabled) {
-		enableRendering();
+		await enableRendering();
 	}
 
 	// Listen for domain updates with better response handling
-	chrome.runtime.onMessage.addListener((msg, _sender, sendResponse) => {
+	chrome.runtime.onMessage.addListener(async (msg, _sender, sendResponse) => {
 		console.log("WebTeX: Received message:", msg);
 
 		if (msg.action === "domain-updated" && msg.allowed) {
@@ -703,7 +838,7 @@ async function safeRender(root = document.body) {
 
 			if (newIsEnabled && !isEnabled) {
 				isEnabled = true;
-				enableRendering();
+				await enableRendering();
 				setupNavigationHandlers();
 				console.log("WebTeX: Enabled rendering");
 			} else if (!newIsEnabled && isEnabled) {
@@ -751,8 +886,8 @@ function handleNavigation() {
 	safeRender();
 }
 
-function enableRendering() {
-	injectCSS(); // Inject styles when enabling
+async function enableRendering() {
+	await injectCSS(); // Inject styles when enabling
 	safeRender();
 
 	observer = new MutationObserver(

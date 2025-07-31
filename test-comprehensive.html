@@ -605,17 +605,31 @@
         // Status checker
         function updateStatus() {
             const status = document.getElementById('status');
-            if (window.rendererState) {
-                const stats = window.rendererState;
+            
+            // Check for various indicators that WebTeX is loaded
+            const hasRendererState = window.rendererState;
+            const hasWebTexElements = document.querySelectorAll('.webtex-katex-rendered, .webtex-custom-rendered, .katex').length > 0;
+            const hasWebTexCSS = document.querySelector('style[id*="webtex"]');
+            
+            console.log('Status check:', {
+                rendererState: hasRendererState,
+                webTexElements: hasWebTexElements,
+                webTexCSS: hasWebTexCSS,
+                totalElements: document.querySelectorAll('.webtex-katex-rendered, .webtex-custom-rendered, .katex').length
+            });
+            
+            if (hasRendererState || hasWebTexElements || hasWebTexCSS) {
+                const stats = window.rendererState || { totalAttempts: 0, katexSuccess: 0, customParserFallback: 0 };
                 const total = stats.totalAttempts || 0;
                 const success = (stats.katexSuccess || 0) + (stats.customParserFallback || 0);
                 const rate = total > 0 ? (success / total * 100).toFixed(1) : '0';
+                const elementCount = document.querySelectorAll('.webtex-katex-rendered, .webtex-custom-rendered, .katex').length;
                 
                 status.className = 'status success';
-                status.innerHTML = `✅ WebTeX Active | Rendered: ${total} expressions | Success Rate: ${rate}% | KaTeX: ${stats.katexSuccess || 0} | Custom: ${stats.customParserFallback || 0}`;
+                status.innerHTML = `✅ WebTeX Active | Rendered: ${total} expressions | Success Rate: ${rate}% | KaTeX: ${stats.katexSuccess || 0} | Custom: ${stats.customParserFallback || 0} | DOM Elements: ${elementCount}`;
             } else {
                 status.className = 'status error';
-                status.innerHTML = '❌ WebTeX not detected or not active on this domain';
+                status.innerHTML = '❌ WebTeX not detected or not active on this domain - Check console for initialization messages';
             }
         }
 
