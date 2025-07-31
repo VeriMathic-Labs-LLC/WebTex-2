@@ -66,7 +66,7 @@ siteToggle.onchange = async () => {
 				if (response?.success) {
 					showToggleStatus(`WebTeX ${action} successfully`);
 				}
-			} catch (e) {
+			} catch (_e) {
 				// Content script might not be loaded on this page
 				showToggleStatus("Injecting WebTeX content script...", true);
 
@@ -85,14 +85,14 @@ siteToggle.onchange = async () => {
 								allowed: list,
 							});
 							showToggleStatus(`WebTeX ${action} after injection`);
-						} catch (e2) {
+						} catch (_e2) {
 							showToggleStatus("WebTeX injection failed - try refreshing the page", false);
 						}
 					}, 100);
-				} catch (injectionError) {}
+				} catch (_injectionError) {}
 			}
 		}
-	} catch (error) {}
+	} catch (_error) {}
 };
 
 /* ---------- helpers ---------- */
