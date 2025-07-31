@@ -64,7 +64,7 @@ script.async = true;
 document.head.appendChild(script);
 
 /* -------------------------------------------------- */
-// Custom LaTeX Parser for edge cases
+// Enhanced Custom LaTeX Parser for edge cases
 class CustomLatexParser {
   constructor() {
     this.supportedEnvironments = [
@@ -76,6 +76,11 @@ class CustomLatexParser {
 
   // Check if expression can be handled by custom parser
   canHandle(tex) {
+    // Handle nuclear notation and text commands
+    if (tex.includes('\\text{') || tex.includes('_Z^') || tex.includes('^{A}')) {
+      return true;
+    }
+    
     // Handle basic matrix operations
     if (tex.includes('\\begin{matrix}') || tex.includes('\\begin{pmatrix}')) {
       return true;
@@ -91,12 +96,23 @@ class CustomLatexParser {
       return true;
     }
     
+    // Handle fraction notation
+    if (tex.includes('rac{') || tex.includes('rac')) {
+      return true;
+    }
+    
     return false;
   }
 
   // Convert to simplified LaTeX that KaTeX can handle
   simplify(tex) {
     let simplified = tex;
+    
+    // Handle nuclear notation with text commands
+    simplified = this.processNuclearNotation(simplified);
+    
+    // Handle fraction notation
+    simplified = this.processFractionNotation(simplified);
     
     // Replace problematic environments with simpler alternatives
     simplified = simplified.replace(/\\begin\{align\}/g, '\\begin{aligned}');
@@ -107,6 +123,54 @@ class CustomLatexParser {
     simplified = simplified.replace(/\\end\{matrix\}/g, '\\end{array}');
     
     return simplified;
+  }
+
+  // Process nuclear notation and text commands
+  processNuclearNotation(tex) {
+    let processed = tex;
+    
+    // Handle nuclear notation like _Z^A X or ^{A}_{Z}N
+    processed = processed.replace(/\\text\{_(\d+)\^(\d+)\s+([^}]+)\}/g, '\\text{}^{$2}_{$1}$3');
+    processed = processed.replace(/\\text\{(\d+)\^(\d+)\s+([^}]+)\}/g, '\\text{}^{$2}_{$1}$3');
+    
+    // Handle decay arrows
+    processed = processed.replace(/\\to/g, '\\rightarrow');
+    
+    // Handle beta decay notation
+    processed = processed.replace(/\\text\{e\^\-\}/g, 'e^{-}');
+    processed = processed.replace(/\\text\{e\^\+\}/g, 'e^{+}');
+    processed = processed.replace(/\\text\{He\}/g, '\\text{He}');
+    processed = processed.replace(/\\text\{Ne\}/g, '\\text{Ne}');
+    processed = processed.replace(/\\text\{F\}/g, '\\text{F}');
+    processed = processed.replace(/\\text\{Ra\}/g, '\\text{Ra}');
+    processed = processed.replace(/\\text\{Rn\}/g, '\\text{Rn}');
+    processed = processed.replace(/\\text\{C\}/g, '\\text{C}');
+    processed = processed.replace(/\\text\{N\}/g, '\\text{N}');
+    
+    // Handle neutrino notation
+    processed = processed.replace(/\\bar\{\\nu\}/g, '\\bar{\\nu}');
+    processed = processed.replace(/\\nu/g, '\\nu');
+    
+    // Handle gamma notation
+    processed = processed.replace(/\\gamma/g, '\\gamma');
+    
+    // Handle half-life notation
+    processed = processed.replace(/T_\{1/2\}/g, 'T_{1/2}');
+    
+    return processed;
+  }
+
+  // Process fraction notation
+  processFractionNotation(tex) {
+    let processed = tex;
+    
+    // Handle rac{num}{den} notation
+    processed = processed.replace(/rac\{([^}]+)\}\{([^}]+)\}/g, '\\frac{$1}{$2}');
+    
+    // Handle simple rac notation
+    processed = processed.replace(/rac(\d+)/g, '\\frac{$1}{1}');
+    
+    return processed;
   }
 
   // Create a simple fallback rendering
@@ -143,7 +207,7 @@ async function renderMathExpression(tex, displayMode = false, element = null) {
     const katexOptions = {
       displayMode: displayMode,
       throwOnError: false,
-      errorColor: '#cc0000',
+      errorColor: 'inherit', // Use inherited color instead of hardcoded red
       strict: false, // Disable strict mode to reduce warnings
       trust: true, // Trust input to allow more features
       macros: {
@@ -156,7 +220,9 @@ async function renderMathExpression(tex, displayMode = false, element = null) {
         "\\quarter": "\\frac{1}{4}",
         "\\third": "\\frac{1}{3}",
         "\\twothirds": "\\frac{2}{3}",
-        "\\threequarters": "\\frac{3}{4}"
+        "\\threequarters": "\\frac{3}{4}",
+        "\\to": "\\rightarrow",
+        "\\rac": "\\frac"
       },
       // Handle Unicode characters better
       minRuleThickness: 0.05,
@@ -377,7 +443,7 @@ function handleUnicodeInMath(tex) {
     processed = processed.replace(new RegExp(unicode, 'g'), latex);
   });
   
-  // Handle other Unicode characters by wrapping them in \text{}
+  // Handle Chinese characters and other Unicode text in math mode
   // This regex matches Unicode characters that are not already in \text{} or other commands
   processed = processed.replace(/([^\u0000-\u007F])/g, (match, char) => {
     // Skip if already in \text{} or other commands
@@ -386,8 +452,17 @@ function handleUnicodeInMath(tex) {
         processed.includes(`\\mathit{${char}}`)) {
       return char;
     }
+    // Wrap Unicode characters in \text{} to prevent math mode errors
     return `\\text{${char}}`;
   });
+  
+  // Handle specific nuclear notation patterns that might contain Unicode
+  processed = processed.replace(/\\text\{_(\d+)\^(\d+)\s+([^}]+)\}/g, '\\text{}^{$2}_{$1}$3');
+  processed = processed.replace(/\\text\{(\d+)\^(\d+)\s+([^}]+)\}/g, '\\text{}^{$2}_{$1}$3');
+  
+  // Handle decay arrows and other symbols
+  processed = processed.replace(/\\to/g, '\\rightarrow');
+  processed = processed.replace(/\\rightarrow/g, '\\rightarrow');
   
   return processed;
 }
