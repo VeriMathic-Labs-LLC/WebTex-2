@@ -18,11 +18,9 @@ function decodeHTMLEntities(text) {
 /* -------------------------------------------------- */
 let observer = null;
 let isEnabled = false;
-let mathjaxLoaded = false;
 let katexLoaded = true; // KaTeX is bundled
 let rendererState = {
   katexSuccess: 0,
-  mathjaxFallback: 0,
   customParserFallback: 0,
   totalAttempts: 0
 };
@@ -30,38 +28,9 @@ let rendererState = {
 // Expose renderer state globally for debugging
 window.rendererState = rendererState;
 
-// Enhanced MathJax configuration
-window.MathJax = {
-  tex: {
-    inlineMath: [['$', '$'], ['\\(', '\\)']],
-    displayMath: [['$$', '$$'], ['\\[', '\\]']],
-    processEscapes: true,
-    processEnvironments: true
-  },
-  options: {
-    skipHtmlTags: ['script', 'noscript', 'style', 'textarea', 'pre', 'code', 'input', 'select', 'button'],
-    ignoreHtmlClass: 'webtex-ignore',
-    processHtmlClass: 'webtex-process'
-  },
-  startup: {
-    typeset: false,
-    ready: () => {
-      mathjaxLoaded = true;
-      console.log('WebTeX: MathJax is ready for fallback rendering.');
-      if (isEnabled) {
-        safeRender();
-      }
-      window.MathJax.startup.defaultReady();
-    }
-  }
-};
+// MathJax configuration removed - KaTeX only
 
-// Load MathJax for fallback
-const script = document.createElement('script');
-script.type = 'text/javascript';
-script.src = chrome.runtime.getURL('mathjax/es5/tex-chtml-full.js');
-script.async = true;
-document.head.appendChild(script);
+// MathJax removed - KaTeX only build
 
 /* -------------------------------------------------- */
 // Enhanced Custom LaTeX Parser for edge cases
@@ -76,17 +45,8 @@ class CustomLatexParser {
 
   // Check if expression can be handled by custom parser
   canHandle(tex) {
-    // Always try the custom parser for common patterns
-    return tex.includes('\\text{') || 
-           tex.includes('rac') || 
-           tex.includes('\\begin{equation}') || 
-           tex.includes('\\begin{align}') ||
-           tex.includes('\\to') ||
-           tex.includes('^{A}') ||
-           tex.includes('_{Z}') ||
-           tex.includes('\\begin{matrix}') || 
-           tex.includes('\\begin{pmatrix}') ||
-           tex.includes('\\begin{cases}');
+    // Always try the custom parser for ANY expression
+    return true;
   }
 
   // Convert to simplified LaTeX that KaTeX can handle
@@ -137,8 +97,11 @@ class CustomLatexParser {
     // Alternative notation: ^{A}_{Z}\text{N}
     str = str.replace(/\^\{([^}]+)\}_\{([^}]+)\}\\text\{([^}]+)\}/g, '{}^{$1}_{$2}\\text{$3}');
     
-    // Already formatted nuclear notation
-    str = str.replace(/\\text\{\}\^/g, '{}^');
+    // Handle already formatted notation: ^{A}{Z}\text{N} -> {}^{A}_{Z}\text{N}
+    str = str.replace(/\^\{([^}]+)\}\{([^}]+)\}\\text\{([^}]+)\}/g, '{}^{$1}_{$2}\\text{$3}');
+    
+    // Handle the specific pattern from your examples: ^{A}{Z}\text{N}
+    str = str.replace(/\$\^\{([^}]+)\}\{([^}]+)\}\\text\{([^}]+)\}/g, '${}^{$1}_{$2}\\text{$3}');
     
     // e^- and e^+ outside \text{}
     str = str.replace(/\\text\{e\^\-\}/g, 'e^{-}');
@@ -202,13 +165,17 @@ async function renderMathExpression(tex, displayMode = false, element = null) {
   
   // Try KaTeX first
   try {
-    // Preprocess the LaTeX to handle Unicode characters
-    const processedTex = handleUnicodeInMath(tex);
+    // Preprocess with custom parser FIRST, then handle Unicode
+    let processedTex = tex;
+    if (customParser.canHandle(tex)) {
+      processedTex = customParser.simplify(tex);
+    }
+    processedTex = handleUnicodeInMath(processedTex);
     
     const katexOptions = {
       displayMode: displayMode,
       throwOnError: false,
-      errorColor: '#cc0000',
+      errorColor: 'inherit',
       strict: false, // Disable strict mode to reduce warnings
       trust: true, // Trust input to allow more features
       macros: {
@@ -221,7 +188,9 @@ async function renderMathExpression(tex, displayMode = false, element = null) {
         "\\quarter": "\\frac{1}{4}",
         "\\third": "\\frac{1}{3}",
         "\\twothirds": "\\frac{2}{3}",
-        "\\threequarters": "\\frac{3}{4}"
+        "\\threequarters": "\\frac{3}{4}",
+        "\\to": "\\rightarrow",
+        "\\rac": "\\frac"
       },
       // Handle Unicode characters better
       minRuleThickness: 0.05,
@@ -239,32 +208,20 @@ async function renderMathExpression(tex, displayMode = false, element = null) {
     
     return { success: true, method: 'katex', element: element };
   } catch (katexError) {
-    console.debug('WebTeX: KaTeX failed, trying MathJax fallback:', katexError.message);
+    console.debug('WebTeX: KaTeX failed, trying custom parser:', katexError.message);
     
-    // Try MathJax fallback
-    if (mathjaxLoaded) {
-      try {
-        if (element) {
-          element.className = 'mj';
-          element.innerHTML = displayMode ? `\\[${tex}\\]` : `\\(${tex}\\)`;
-          
-          await window.MathJax.typesetPromise([element]);
-          rendererState.mathjaxFallback++;
-          element.classList.add('webtex-mathjax-rendered');
-          
-          return { success: true, method: 'mathjax', element: element };
-        }
-      } catch (mathjaxError) {
-        console.debug('WebTeX: MathJax fallback failed:', mathjaxError.message);
-      }
-    }
-    
-    // Try custom parser as last resort
+    // Try custom parser as fallback
     if (customParser.canHandle(tex)) {
       try {
         const simplified = customParser.simplify(tex);
         const processedSimplified = handleUnicodeInMath(simplified);
-        const rendered = katex.renderToString(processedSimplified, { displayMode, throwOnError: false });
+        const rendered = katex.renderToString(processedSimplified, { 
+          displayMode, 
+          throwOnError: false,
+          errorColor: 'inherit',
+          strict: false,
+          trust: true
+        });
         
         if (element) {
           element.innerHTML = rendered;
@@ -450,6 +407,13 @@ function handleUnicodeInMath(tex) {
   Object.entries(unicodeFractions).forEach(([unicode, latex]) => {
     processed = processed.replace(new RegExp(unicode, 'g'), latex);
   });
+
+  // Common Unicode math symbols
+  processed = processed.replace(/→/g, '\\rightarrow');
+  processed = processed.replace(/∈/g, '\\in');
+  processed = processed.replace(/⊆/g, '\\subseteq');
+  processed = processed.replace(/ν/g, '\\nu');
+  processed = processed.replace(/γ/g, '\\gamma');
   
   // Handle other Unicode characters by wrapping them in \text{}
   // This regex matches Unicode characters that are not already in \text{} or other commands
@@ -482,9 +446,8 @@ async function safeRender(root = document.body) {
       console.log('WebTeX: Rendering complete', {
         total: rendererState.totalAttempts,
         katex: rendererState.katexSuccess,
-        mathjax: rendererState.mathjaxFallback,
         custom: rendererState.customParserFallback,
-        successRate: ((rendererState.katexSuccess + rendererState.mathjaxFallback + rendererState.customParserFallback) / rendererState.totalAttempts * 100).toFixed(1) + '%'
+        successRate: ((rendererState.katexSuccess + rendererState.customParserFallback) / rendererState.totalAttempts * 100).toFixed(1) + '%'
       });
     }
   } catch (e) {
@@ -576,13 +539,9 @@ function disableRendering() {
     observer = null;
   }
   
-  if (window.MathJax && window.MathJax.typesetClear) {
-    window.MathJax.typesetClear();
-  }
-  
   // Clear KaTeX rendered elements
-  document.querySelectorAll('.webtex-katex-rendered, .webtex-mathjax-rendered, .webtex-custom-rendered').forEach(el => {
-    el.classList.remove('webtex-katex-rendered', 'webtex-mathjax-rendered', 'webtex-custom-rendered');
+  document.querySelectorAll('.webtex-katex-rendered, .webtex-custom-rendered').forEach(el => {
+    el.classList.remove('webtex-katex-rendered', 'webtex-custom-rendered');
   });
 }
 
