@@ -377,18 +377,23 @@ class CustomLatexParser {
 
 	fixMalformedLatex(str) {
 		// Fix common malformed patterns
+		const result = str;
 
-		// Fix unclosed braces in fractions
+		// Fix unclosed braces in complex expressions
 		let braceCount = 0;
-		let _inFrac = false;
-		let result = "";
+		let inMathCommand = false;
+		let fixedResult = "";
 
-		for (let i = 0; i < str.length; i++) {
-			const char = str[i];
-			result += char;
+		for (let i = 0; i < result.length; i++) {
+			const char = result[i];
 
-			if (str.substr(i, 5) === "\\frac") {
-				_inFrac = true;
+			// Detect if we're in a math command like \frac, \sqrt, etc.
+			if (char === "\\") {
+				inMathCommand = true;
+			} else if (inMathCommand && /[a-zA-Z]/.test(char)) {
+				// Still in command name
+			} else if (inMathCommand && /[^a-zA-Z]/.test(char)) {
+				inMathCommand = false;
 			}
 
 			if (char === "{") {
@@ -397,18 +402,29 @@ class CustomLatexParser {
 				braceCount--;
 				if (braceCount < 0) {
 					// Extra closing brace, remove it
-					result = result.slice(0, -1);
-					braceCount = 0;
+					continue; // Skip this brace
 				}
 			}
+
+			fixedResult += char;
 		}
 
 		// Add missing closing braces
 		if (braceCount > 0) {
-			result += "}".repeat(braceCount);
+			fixedResult += "}".repeat(braceCount);
 		}
 
-		return result;
+		// Fix specific patterns that commonly cause issues
+		// Fix incomplete fractions: \frac{a}{b -> \frac{a}{b}
+		fixedResult = fixedResult.replace(/\\frac\{([^}]+)\}\{([^}]*)(?:\s*)$/g, "\\frac{$1}{$2}");
+
+		// Fix incomplete exponents: x^2 -> x^{2} if followed by operators
+		fixedResult = fixedResult.replace(/\^([a-zA-Z0-9])([+-/*=])/g, "^{$1}$2");
+
+		// Fix incomplete subscripts: x_2 -> x_{2} if followed by operators
+		fixedResult = fixedResult.replace(/_([a-zA-Z0-9])([+-/*=])/g, "_{$1}$2");
+
+		return fixedResult;
 	}
 
 	processFractionNotation(str) {
@@ -423,7 +439,7 @@ class CustomLatexParser {
 				const closeCount = (den.match(/\}/g) || []).length;
 				if (openCount > closeCount) {
 					// Add missing closing braces
-					den += "}}".repeat(openCount - closeCount);
+					den += "}".repeat(openCount - closeCount);
 				}
 				return `\\frac{${num}}{${den}}`;
 			},
@@ -435,12 +451,22 @@ class CustomLatexParser {
 			(_m, num, following) => `\\frac{${num}}{${following}}`,
 		);
 
+		// Handle incomplete fractions at the end of expressions
+		str = str.replace(/\\frac\{([^}]+)\}\{([^}]*)(?:\s*)$/g, "\\frac{$1}{$2}");
+
+		// Handle fractions with missing closing brace in numerator
+		str = str.replace(/\\frac\{([^}]*)(?:\s*)$/g, "\\frac{$1}{}");
+
 		// rac{num}{den}
 		str = str.replace(/(?:\\f?rac|rac)\{([^}]+)\}\{([^}]+)\}/g, "\\frac{$1}{$2}");
 		// rac27 pattern
 		str = str.replace(/\brac(\d)(\d+)/g, (_, a, b) => `\\frac{${a}}{${b}}`);
 		// standalone rac
 		str = str.replace(/\brac\b/g, "\\frac");
+
+		// Fix fractions with double braces
+		str = str.replace(/\\frac\{\{([^}]+)\}\}\{\{([^}]+)\}\}/g, "\\frac{$1}{$2}");
+
 		return str;
 	}
 
@@ -486,12 +512,25 @@ class CustomLatexParser {
 		// Neutrino and antineutrino patterns
 		str = str.replace(/\\bar\{\\nu\}/g, "\\overline{\\nu}");
 
+		// Handle overline nu patterns that might be malformed
+		str = str.replace(/\\overline\{\\nu(.*?)\}/g, (match, rest) => {
+			if (rest === "") return "\\overline{\\nu}";
+			return match; // Keep as is if it has content
+		});
+
 		// Star notation for excited states
 		str = str.replace(/\\text\{([^}]+)\*\}/g, "\\text{$1}^*");
 
 		// Handle Z^A and _Z^A without \text{}
 		str = str.replace(/([A-Z])\^([A-Z])\s+([A-Z])/g, "{}^{$2}\\text{$3}");
 		str = str.replace(/_([A-Z])\^([A-Z])\s+([A-Z])/g, "{}^{$2}_{$1}\\text{$3}");
+
+		// Fix common malformed nuclear notation patterns
+		// Handle cases like {}^{A}\text{N} -> {}^{A}\text{N}
+		str = str.replace(/\{\}\^\{([^}]+)\}\\text\{([^}]+)\}/g, "{}^{$1}\\text{$2}");
+
+		// Handle cases like {}^{A}_{Z+1}\text{N'} + e^{-} + \overline{\nu}
+		str = str.replace(/\{\}\^\{([^}]+)\}_\{([^}]+)\}\\text\{([^}]+)\}/g, "{}^{$1}_{$2}\\text{$3}");
 
 		return str;
 	}
@@ -572,8 +611,16 @@ class CustomLatexParser {
 				openCount++;
 			} else if (chars[i] === "}") {
 				openCount--;
+				// Handle extra closing braces
+				if (openCount < 0) {
+					openCount = 0; // Reset count but don't add the brace back
+					chars[i] = ""; // Remove this brace
+				}
 			}
 		}
+
+		// Rebuild string without extra closing braces
+		result = chars.filter((char) => char !== "").join("");
 
 		// Add missing closing braces
 		while (openCount > 0) {
@@ -581,8 +628,8 @@ class CustomLatexParser {
 			openCount--;
 		}
 
-		// Remove extra closing braces (simple approach)
-		result = result.replace(/\}\}+/g, "}");
+		// Handle nested braces more carefully
+		result = result.replace(/\}(\s*)\}/g, "}$1"); // Remove duplicate consecutive braces
 
 		return result;
 	}
@@ -657,7 +704,7 @@ function hasUnbalancedDelimiters(str) {
 
 	// Skip LaTeX commands and environments that might look like delimiters
 	const skipPatterns = [
-		/^\\(?:begin|end)\{/, // \begin{...} or \end{...}
+		/^\\(?:begin|end)\{/, // \\begin{...} or \\end{...}
 		/^\\[a-zA-Z]+/, // Any LaTeX command
 	];
 
@@ -705,35 +752,51 @@ function hasUnbalancedDelimiters(str) {
 
 		const char = str[i];
 
-		// Check for \\left and \\right commands
+		// Check for \\left command
 		if (str.startsWith("\\left", i)) {
-			// Find the end of the \\left command
-			const end = i + 5; // length of '\\left'
-			if (end < str.length) {
-				const delimiter = str[i + 5]; // The character after \\left
-				const fullCommand = `\\left${delimiter === "\\" ? "\\" : delimiter}`;
-				stack.push(fullCommand);
-				i = end + (delimiter === "\\" ? 1 : 0); // Skip past the delimiter
-				continue;
+			// Find the complete \\left command
+			let commandEnd = i + 5; // length of '\\left'
+
+			// Handle special cases like \\left\\{ or \\left\\lfloor
+			if (commandEnd + 1 < str.length && str[commandEnd] === "\\") {
+				// Skip to the end of the command
+				while (commandEnd < str.length && /[a-zA-Z]/.test(str[commandEnd + 1])) commandEnd++;
+				commandEnd++;
+			} else if (commandEnd < str.length) {
+				// Handle single character delimiters like (, [, {, |, .
+				commandEnd++;
 			}
+
+			const fullCommand = str.substring(i, commandEnd);
+			stack.push(fullCommand);
+			i = commandEnd - 1; // -1 because the loop will increment
+			continue;
 		}
 
+		// Check for \\right command
 		if (str.startsWith("\\right", i)) {
-			// Find the end of the \\right command
-			const end = i + 6; // length of '\\right'
-			if (end < str.length) {
-				const delimiter = str[i + 6]; // The character after \\right
-				const fullCommand = `\\right${delimiter === "\\" ? "\\" : delimiter}`;
+			// Find the complete \\right command
+			let commandEnd = i + 6; // length of '\\right'
 
-				if (stack.length === 0 || !isLeftRightPair(stack[stack.length - 1], fullCommand)) {
-					const unmatchedDelimiter = stack.length === 0 ? fullCommand : stack[stack.length - 1];
-					console.log(`Unmatched delimiter: ${unmatchedDelimiter}`);
-					return true; // Unmatched \\right
-				}
-				stack.pop();
-				i = end + (delimiter === "\\" ? 1 : 0); // Skip past the delimiter
-				continue;
+			// Handle special cases like \\right\\} or \\right\\rfloor
+			if (commandEnd + 1 < str.length && str[commandEnd] === "\\") {
+				// Skip to the end of the command
+				while (commandEnd < str.length && /[a-zA-Z]/.test(str[commandEnd + 1])) commandEnd++;
+				commandEnd++;
+			} else if (commandEnd < str.length) {
+				// Handle single character delimiters like ), ], }, |, .
+				commandEnd++;
 			}
+
+			const fullCommand = str.substring(i, commandEnd);
+
+			if (stack.length === 0 || !isLeftRightPair(stack[stack.length - 1], fullCommand)) {
+				console.log(`Unmatched delimiter: ${fullCommand}`);
+				return true; // Unmatched \\right
+			}
+			stack.pop();
+			i = commandEnd - 1; // -1 because the loop will increment
+			continue;
 		}
 
 		// Handle regular delimiters
@@ -798,7 +861,14 @@ async function renderMathExpression(tex, displayMode = false, element = null) {
 	}
 
 	// Handle common LaTeX newline issues
-	cleanedTex = cleanedTex.replace(/\\(?:newline|\\)\s*\n?/g, "\\\\");
+	// In display mode, \ or \newline do nothing, so we remove them to avoid warnings
+	if (isDisplayMath) {
+		cleanedTex = cleanedTex.replace(/\\\\(?:\s*\n?)?/g, " ");
+		cleanedTex = cleanedTex.replace(/\\newline(?:\s*\n?)?/g, " ");
+	} else {
+		// In inline mode, replace with actual line breaks
+		cleanedTex = cleanedTex.replace(/\\(?:newline|\\)\s*\n?/g, "\\\\");
+	}
 
 	// Check for unbalanced delimiters with more detailed reporting
 	if (hasUnbalancedDelimiters(cleanedTex)) {
@@ -833,7 +903,15 @@ async function renderMathExpression(tex, displayMode = false, element = null) {
 		const katexOptions = {
 			displayMode: isDisplayMath,
 			errorColor: "inherit",
-			strict: "warn", // Be more permissive with input
+			strict: (errorCode) => {
+				// Handle specific error codes to reduce warnings
+				if (errorCode === "newLineInDisplayMode") {
+					// In display mode, newlines are ignored, so we can safely ignore this warning
+					return "ignore";
+				}
+				// For other errors, warn but continue
+				return "warn";
+			},
 			trust: (context) => {
 				// Allow common commands that need trust
 				const trustedCommands = [
