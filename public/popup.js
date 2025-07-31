@@ -63,13 +63,11 @@ siteToggle.onchange = async () => {
 					action: "domain-updated",
 					allowed: list,
 				});
-				console.log("WebTeX: Message sent to content script, response:", response);
 				if (response?.success) {
 					showToggleStatus(`WebTeX ${action} successfully`);
 				}
 			} catch (e) {
 				// Content script might not be loaded on this page
-				console.debug("WebTeX: Could not send message to tab", e);
 				showToggleStatus("Injecting WebTeX content script...", true);
 
 				// Try to inject the content script if it's not loaded
@@ -78,7 +76,6 @@ siteToggle.onchange = async () => {
 						target: { tabId: currentTab.id },
 						files: ["app.js"],
 					});
-					console.log("WebTeX: Content script injected");
 
 					// Try sending the message again
 					setTimeout(async () => {
@@ -87,21 +84,15 @@ siteToggle.onchange = async () => {
 								action: "domain-updated",
 								allowed: list,
 							});
-							console.log("WebTeX: Message sent after script injection");
 							showToggleStatus(`WebTeX ${action} after injection`);
 						} catch (e2) {
-							console.debug("WebTeX: Still could not send message after injection", e2);
 							showToggleStatus("WebTeX injection failed - try refreshing the page", false);
 						}
 					}, 100);
-				} catch (injectionError) {
-					console.debug("WebTeX: Could not inject content script", injectionError);
-				}
+				} catch (injectionError) {}
 			}
 		}
-	} catch (error) {
-		console.error("WebTeX: Error in popup toggle handler:", error);
-	}
+	} catch (error) {}
 };
 
 /* ---------- helpers ---------- */

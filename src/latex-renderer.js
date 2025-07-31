@@ -10,7 +10,6 @@ class LatexRenderer {
 
 	async init() {
 		try {
-			console.log("Enhanced LaTeX renderer initialized");
 		} catch (error) {
 			console.error("Failed to initialize LaTeX renderer:", error);
 		}
