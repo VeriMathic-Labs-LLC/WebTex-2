@@ -726,9 +726,6 @@ class CustomLatexParser {
 			openCount--;
 		}
 
-		// Handle nested braces more carefully
-		result = result.replace(/\}(\s*)\}/g, "}$1"); // Remove duplicate consecutive braces
-
 		// Clean up multiple consecutive empty braces that cause delimiter balance issues
 		// Handle the specific case where empty braces are followed by superscripts
 		result = result.replace(/\{\}\{\}\{\}\^/g, "^"); // Remove three empty braces followed by ^
@@ -739,10 +736,6 @@ class CustomLatexParser {
 		result = result.replace(/\{\}\{\}(?!\^)/g, ""); // Remove pairs of empty braces not followed by ^
 		result = result.replace(/\{\}\{\}\{\}(?!\^)/g, ""); // Remove triplets of empty braces not followed by ^
 		result = result.replace(/\{\}\{\}\{\}\{\}(?!\^)/g, ""); // Remove quadruplets of empty braces not followed by ^
-
-		// Fix specific malformed fraction patterns
-		// Handle \frac{\pi^{2}{6} -> \frac{\pi^{2}}{6}
-		result = result.replace(/\\frac\{([^}]*\^\{[^}]*\})\{([^}]*)\}/g, "\\frac{$1}{$2}");
 
 		return result;
 	}
@@ -985,10 +978,6 @@ async function renderMathExpression(tex, displayMode = false, element = null) {
 	cleanedTex = cleanedTex.replace(/\{\}\{\}\{\}(?!\^)/g, ""); // Remove triplets of empty braces not followed by ^
 	cleanedTex = cleanedTex.replace(/\{\}\{\}\{\}\{\}(?!\^)/g, ""); // Remove quadruplets of empty braces not followed by ^
 
-	// Fix specific malformed fraction patterns before processing
-	// Handle \frac{\pi^{2}{6} -> \frac{\pi^{2}}{6}
-	cleanedTex = cleanedTex.replace(/\\frac\{([^}]*\^\{[^}]*\})\{([^}]*)\}/g, "\\frac{$1}{$2}");
-
 	// Handle display mode delimiters
 	const isDisplayMath =
 		displayMode ||
@@ -1013,10 +1002,8 @@ async function renderMathExpression(tex, displayMode = false, element = null) {
 		cleanedTex = cleanedTex.replace(/\\(?:newline|\\)\s*\n?/g, "\\\\");
 	}
 
-	// Fix unmatched braces before checking balance if available
-	if (typeof customParser.fixUnmatchedBraces === "function") {
-		cleanedTex = customParser.fixUnmatchedBraces(cleanedTex);
-	}
+	// Fix unmatched braces before checking balance
+	cleanedTex = customParser.fixUnmatchedBraces(cleanedTex);
 
 	// Check for unbalanced delimiters with more detailed reporting
 	if (hasUnbalancedDelimiters(cleanedTex)) {

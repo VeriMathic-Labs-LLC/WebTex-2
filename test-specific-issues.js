@@ -93,8 +93,6 @@ function testSpecificIssues() {
 			openCount--;
 		}
 
-		result = result.replace(/\}(\s*)\}/g, "}$1");
-
 		// Same empty brace cleanup used in the extension
 		result = result.replace(/\{\}\{\}\{\}\^/g, "^");
 		result = result.replace(/\{\}\{\}\^/g, "^");
@@ -103,7 +101,6 @@ function testSpecificIssues() {
 		result = result.replace(/\{\}\{\}\{\}(?!\^)/g, "");
 		result = result.replace(/\{\}\{\}\{\}\{\}(?!\^)/g, "");
 
-		result = result.replace(/\\frac\{([^}]*\^\{[^}]*\})\{([^}]*)\}/g, "\\frac{$1}{$2}");
 		return result;
 	}
 
