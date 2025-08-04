@@ -13,7 +13,9 @@ function cleanupEmptyBraces(str) {
 }
 
 // Helper to fix unmatched braces similar to extension logic
-// Note: This function no longer calls cleanupEmptyBraces internally to avoid circular dependency
+// Previously, fixUnmatchedBraces called cleanupEmptyBraces internally, but cleanupEmptyBraces is also called elsewhere in the processing pipeline.
+// This led to a circular dependency where both functions could end up calling each other (directly or indirectly), causing redundant processing and potential logic errors.
+// To resolve this, fixUnmatchedBraces no longer calls cleanupEmptyBraces internally; instead, callers are responsible for invoking cleanupEmptyBraces as needed.
 function fixUnmatchedBraces(str) {
 	let result = str;
 	let openCount = 0;
