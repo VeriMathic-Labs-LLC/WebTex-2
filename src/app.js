@@ -686,7 +686,14 @@ class CustomLatexParser {
 		}
 
 		// Handle nested braces more carefully
-		result = result.replace(/\}(\s*)\}/g, "}$1"); // Remove duplicate consecutive braces
+		// Previously, we attempted to remove consecutive closing braces to
+		// clean up malformed input:
+		//   result = result.replace(/\}(\s*)\}/g, "}$1");
+		// However, this also stripped valid sequences like "}}" that
+		// legitimately close nested structures (e.g. `\frac{1}{n^{2}}`).
+		// The removal caused balanced expressions such as
+		// `\frac{\pi^{2}}{6}` to lose required braces, leading to KaTeX
+		// parse errors like "Unexpected end of input".
 
 		return result;
 	}
