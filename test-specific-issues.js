@@ -36,6 +36,7 @@ function fixUnmatchedBraces(str) {
 		openCount--;
 	}
 
+	// Apply cleanup after fixing braces to maintain expected behavior
 	return cleanupEmptyBraces(result);
 }
 
