@@ -329,59 +329,63 @@ function cleanupEmptyBraces(str) {
 // Centralises fixes for incomplete \text{} commands and malformed integral
 // limits that were previously duplicated in multiple locations.
 function fixIncompleteCommands(str) {
-    // --- Incomplete \text{}
-    // Replace standalone "\\text" at string end or followed by whitespace
-    str = str.replace(/\\text(?=$|\s)/g, "\\text{}");
+	// --- Incomplete \text{}
+	// Replace standalone "\\text" at string end or followed by whitespace
+	str = str.replace(/\\text(?=$|\s)/g, "\\text{}");
 
-    // Replace "\\text" not followed by an opening brace
-    str = str.replace(/\\text(?!\s*\{)/g, "\\text{}");
+	// Replace "\\text" not followed by an opening brace
+	str = str.replace(/\\text(?!\s*\{)/g, "\\text{}");
 
-    // Replace "\\text{" that has no closing brace until end-of-string
-    str = str.replace(/\\text\{[^}]*$/g, "\\text{}");
+	// Replace "\\text{" that has no closing brace until end-of-string
+	str = str.replace(/\\text\{[^}]*$/g, "\\text{}");
 
-    // --- Malformed integrals (missing superscripts)
-    // \int_{<sub>}^<nothing>
-    str = str.replace(/\\int_\{([^}]+)\}\^\s*$/g, "\\int_{$1}^{}");
+	// --- Malformed integrals (missing superscripts)
+	// \int_{<sub>}^<nothing>
+	str = str.replace(/\\int_\{([^}]+)\}\^\s*$/g, "\\int_{$1}^{}");
 
-    // \int_{<sub>}^  <whitespace>
-    str = str.replace(/\\int_\{([^}]+)\}\^\s+/g, "\\int_{$1}^{} ");
+	// \int_{<sub>}^  <whitespace>
+	str = str.replace(/\\int_\{([^}]+)\}\^\s+/g, "\\int_{$1}^{} ");
 
-    // \int_{<sub>}^<token>   (token not wrapped in braces)
-    str = str.replace(/\\int_\{([^}]+)\}\^(?!\s*\{)/g, "\\int_{$1}^{}");
+	// \int_{<sub>}^<token>   (token not wrapped in braces)
+	str = str.replace(/\\int_\{([^}]+)\}\^(?!\s*\{)/g, "\\int_{$1}^{}");
 
-    // Also handle variants without braces around subscript, e.g. \int_0^
-    // Pattern allows either a LaTeX command (e.g., \\alpha) or bare token
-    const SUBSCRIPT_TOKEN = "(?:\\\\[a-zA-Z]+|[^_\\\\\s{}]+)";
-    const reSubNoBraceEnd = new RegExp(`\\\\int_${SUBSCRIPT_TOKEN}\\^\\s*$`, "g");
-    const reSubNoBraceToken = new RegExp(`\\\\int_${SUBSCRIPT_TOKEN}\\^(?!\\s*\\{)`, "g");
-    str = str.replace(reSubNoBraceEnd, (_m) => _m.replace(/\\int_/, "\\int_{").replace(/\^/, "}^{\\,}"));
-    str = str.replace(reSubNoBraceToken, (_m) => _m.replace(/\\int_/, "\\int_{").replace(/\^/, "}^{\\,}"));
+	// Also handle variants without braces around subscript, e.g. \int_0^
+	// Pattern allows either a LaTeX command (e.g., \\alpha) or bare token
+	const SUBSCRIPT_TOKEN = "(?:\\\\[a-zA-Z]+|[^_\\\\\s{}]+)";
+	const reSubNoBraceEnd = new RegExp(`\\\\int_${SUBSCRIPT_TOKEN}\\^\\s*$`, "g");
+	const reSubNoBraceToken = new RegExp(`\\\\int_${SUBSCRIPT_TOKEN}\\^(?!\\s*\\{)`, "g");
+	str = str.replace(reSubNoBraceEnd, (_m) =>
+		_m.replace(/\\int_/, "\\int_{").replace(/\^/, "}^{\\,}"),
+	);
+	str = str.replace(reSubNoBraceToken, (_m) =>
+		_m.replace(/\\int_/, "\\int_{").replace(/\^/, "}^{\\,}"),
+	);
 
-    // \int_0^{  (missing closing brace on superscript)
-    const reSubMissingBrace = new RegExp(`\\\\int_${SUBSCRIPT_TOKEN}\\^\\{[^}]*$`, "g");
-    str = str.replace(reSubMissingBrace, (_m) => {
-        return _m.replace(/\\int_/, "\\int_{").replace(/\^\{[^}]*$/, "}^{\\,}");
-    });
+	// \int_0^{  (missing closing brace on superscript)
+	const reSubMissingBrace = new RegExp(`\\\\int_${SUBSCRIPT_TOKEN}\\^\\{[^}]*$`, "g");
+	str = str.replace(reSubMissingBrace, (_m) => {
+		return _m.replace(/\\int_/, "\\int_{").replace(/\^\{[^}]*$/, "}^{\\,}");
+	});
 
-    // --- Unmatched \left ... \right handling
-    // Replace standalone \left(, \left[, etc. without matching \right with regular delimiters
-    str = str.replace(/\\left\s*([\(\[\{\|\.])/g, "$1");
-    // Replace standalone \right), \right], etc. without matching \left
-    str = str.replace(/\\right\s*([\)\]\}\|\.])/g, "$1");
+	// --- Unmatched \left ... \right handling
+	// Replace standalone \left(, \left[, etc. without matching \right with regular delimiters
+	str = str.replace(/\\left\s*([([{|.])/g, "$1");
+	// Replace standalone \right), \right], etc. without matching \left
+	str = str.replace(/\\right\s*([)\]}|.])/g, "$1");
 
-    // Remove any remaining standalone \\left or \\right that are not followed by a delimiter character.
-    // These often cause false "Unmatched delimiter" warnings later in the pipeline.
-    str = str.replace(/\\left\s*(?=\s|$)/g, "");
-    str = str.replace(/\\right\s*(?=\s|$)/g, "");
+	// Remove any remaining standalone \\left or \\right that are not followed by a delimiter character.
+	// These often cause false "Unmatched delimiter" warnings later in the pipeline.
+	str = str.replace(/\\left\s*(?=\s|$)/g, "");
+	str = str.replace(/\\right\s*(?=\s|$)/g, "");
 
-    // --- Generic: caret without superscript right before math delimiter or end
-    // e.g., "^$", "^\\)" or "^" at string end
-    // Insert a thin space (\\,) as placeholder so KaTeX accepts the group.
-    str = str.replace(/\^\s*(?=(?:\$|\\\\\)|\\\\\]|$))/g, "^{\\,}");
+	// --- Generic: caret without superscript right before math delimiter or end
+	// e.g., "^$", "^\\)" or "^" at string end
+	// Insert a thin space (\\,) as placeholder so KaTeX accepts the group.
+	str = str.replace(/\^\s*(?=(?:\$|\\\\\)|\\\\\]|$))/g, "^{\\,}");
 
-    // Finally, convert any remaining empty superscript braces to a thin space placeholder
-    str = str.replace(/\^\{\}/g, "^{\\,}");
-    return str;
+	// Finally, convert any remaining empty superscript braces to a thin space placeholder
+	str = str.replace(/\^\{\}/g, "^{\\,}");
+	return str;
 }
 // --------------------------------------------------
 
@@ -733,10 +737,8 @@ class CustomLatexParser {
 		);
 		str = str.replace(MALFORMED_NESTED_TEXT_PATTERN, "{}^{$1}\\text{$2}");
 
-
 		// Handle nested form without escaped caret: \text{^{A}\text{N}} -> {}^{A}\text{N}
 		str = str.replace(/\\text\{\^\{([^}]+)\}\\text\{([^}]+)\}\}/g, "{}^{$1}\\text{$2}");
-
 
 		// Final cleanup using the helper method
 		str = cleanupEmptyBraces(str);
@@ -799,8 +801,6 @@ class CustomLatexParser {
 
 		// Fix missing braces in limits: \lim_{x o infty} -> \lim_{x \to \infty}
 		str = str.replace(/\\lim_\{([^}]*)\s+o\s+infty\}/g, "\\lim_{$1 \\to \\infty}");
-
-
 
 		// Auto-wrap bare ^ and _ arguments with braces
 		str = str.replace(/(\^|_)(?![{\\])\s*([A-Za-z0-9+-])/g, "$1{$2}");
@@ -891,172 +891,6 @@ class CustomLatexParser {
 const customParser = new CustomLatexParser();
 
 /* -------------------------------------------------- */
-// Enhanced delimiter balance check with LaTeX-specific handling
-function hasUnbalancedDelimiters(str) {
-	// Skip empty or very short strings
-	if (!str || str.length < 2) return false;
-
-	const stack = [];
-	const pairs = {
-		"(": ")",
-		"[": "]",
-		"{": "}",
-		"\\left(": "\\right)",
-		"\\left[": "\\right]",
-		"\\left\\{": "\\right\\}",
-		"\\left.": "\\right.",
-		"\\left|": "\\right|",
-		"\\left\\|": "\\right\\|",
-		"\\left\\lfloor": "\\right\\rfloor",
-		"\\left\\lceil": "\\right\\rceil",
-		"\\left\\langle": "\\right\\rangle",
-	};
-
-	// Skip LaTeX commands and environments that might look like delimiters
-	const skipPatterns = [
-		/^\\(?:begin|end)\{/, // \\begin{...} or \\end{...}
-		/^\\[a-zA-Z]+/, // Any LaTeX command
-	];
-
-	// Skip over LaTeX commands and environments
-	const shouldSkip = (s, i) => {
-		if (s[i] !== "\\") return false;
-		return skipPatterns.some((pattern) => {
-			pattern.lastIndex = i;
-			return pattern.test(s);
-		});
-	};
-
-	// Check for \\left and \\right commands
-	const isLeftRightPair = (left, right) => {
-		if (left.startsWith("\\left") && right.startsWith("\\right")) {
-			const leftType = left.slice(5);
-			const rightType = right.slice(6);
-
-			// Handle special cases like \\left. and \\right.
-			if (leftType === "." || rightType === ".") return true;
-
-			// Check if they match (e.g., \\left( with \\right))
-			const leftChar = leftType[0];
-			const rightChar = rightType[0];
-
-			return (
-				leftChar === rightChar ||
-				(leftChar === "(" && rightChar === ")") ||
-				(leftChar === "[" && rightChar === "]") ||
-				(leftChar === "{" && rightChar === "}") ||
-				(leftChar === "<" && rightChar === ">")
-			);
-		}
-		return false;
-	};
-
-	// Main scanning loop
-	for (let i = 0; i < str.length; i++) {
-		// Skip LaTeX commands and environments
-		if (shouldSkip(str, i)) {
-			// Skip to the end of the command
-			while (i < str.length && /[a-zA-Z]/.test(str[i + 1])) i++;
-			continue;
-		}
-
-		const char = str[i];
-
-		// Check for \\left command
-		if (str.startsWith("\\left", i)) {
-			// Find the complete \\left command
-			let commandEnd = i + 5; // length of '\\left'
-
-			// Handle delimiter specified by a command, e.g., \left\{
-			if (commandEnd < str.length && str[commandEnd] === "\\") {
-				let cmdWordEnd = commandEnd + 1;
-				while (cmdWordEnd < str.length && str[cmdWordEnd].match(/[a-zA-Z]/)) {
-					cmdWordEnd++;
-				}
-				// If it's a command like \{, the command is the delimiter
-				if (cmdWordEnd > commandEnd + 1) {
-					commandEnd = cmdWordEnd;
-				} else {
-					// It's a single character escaped, like \|
-					commandEnd++;
-				}
-			} else if (commandEnd < str.length && "([{.| ".includes(str[commandEnd])) {
-				// Handle single character delimiters like (, [, {, |, .
-				commandEnd++;
-			}
-			const fullCommand = str.substring(i, commandEnd);
-			stack.push(fullCommand);
-			i = commandEnd - 1; // -1 because the loop will increment
-			continue;
-		}
-
-		// Check for \\right command
-		if (str.startsWith("\\right", i)) {
-			// Find the complete \\right command
-			let commandEnd = i + 6; // length of '\\right'
-
-			// Handle delimiter specified by a command, e.g., \right\}
-			if (commandEnd < str.length && str[commandEnd] === "\\") {
-				let cmdWordEnd = commandEnd + 1;
-				while (cmdWordEnd < str.length && str[cmdWordEnd].match(/[a-zA-Z]/)) {
-					cmdWordEnd++;
-				}
-				// If it's a command like \}, the command is the delimiter
-				if (cmdWordEnd > commandEnd + 1) {
-					commandEnd = cmdWordEnd;
-				} else {
-					// It's a single character escaped, like \|
-					commandEnd++;
-				}
-			} else if (commandEnd < str.length && ")]}.| ".includes(str[commandEnd])) {
-				// Handle single character delimiters like ), ], }, |, .
-				commandEnd++;
-			}
-
-			const fullCommand = str.substring(i, commandEnd);
-
-			if (stack.length === 0 || !isLeftRightPair(stack[stack.length - 1], fullCommand)) {
-				// Warn in console when unmatched delimiter is detected, but avoid using console.log
-				// console.debug(`Unmatched delimiter suppressed: ${fullCommand}`);
-				return true; // Unmatched \\right
-			}
-			stack.pop();
-			i = commandEnd - 1; // -1 because the loop will increment
-			continue;
-		}
-
-		// Handle regular delimiters
-		if (pairs[char]) {
-			stack.push(char);
-		} else if (char === ")" || char === "]" || char === "}") {
-			if (stack.length === 0 || pairs[stack.pop()] !== char) {
-				return true; // Unmatched closing delimiter
-			}
-		}
-	}
-
-	// Check for unclosed environments
-	const envStack = [];
-	const envRegex = /\\(begin|end)\s*\{([^}]*)\}/g;
-	let match;
-
-	while ((match = envRegex.exec(str)) !== null) {
-		const [_, type, name] = match;
-		if (type === "begin") {
-			envStack.push(name);
-		} else if (type === "end") {
-			if (envStack.length === 0 || envStack[envStack.length - 1] !== name) {
-				return true; // Unmatched \\end
-			}
-			envStack.pop();
-		}
-	}
-
-	// If we get here, check if all delimiters and environments are closed
-	return stack.length > 0 || envStack.length > 0;
-}
-
-/* -------------------------------------------------- */
 // Enhanced rendering function with better error handling and fallback logic
 async function renderMathExpression(tex, displayMode = false, element = null) {
 	rendererState.totalAttempts++;
@@ -1125,7 +959,7 @@ async function renderMathExpression(tex, displayMode = false, element = null) {
 	}
 
 	// Delimiter balance issues will now be handled by KaTeX itself; we defer checks
-    // until after an initial KaTeX parse attempt to minimise false positives.
+	// until after an initial KaTeX parse attempt to minimise false positives.
 
 	// Try KaTeX first with the original text
 	try {
@@ -1219,9 +1053,6 @@ async function renderMathExpression(tex, displayMode = false, element = null) {
 
 		return { success: true, method: "katex", element };
 	} catch (katexError) {
-		console.warn("KaTeX rendering failed, falling back to custom parser:", katexError);
-		reportKaTeXError(tex, katexError);
-
 		// Check if this is an invalid command error
 		const isInvalidCommand =
 			katexError.message &&
@@ -1229,18 +1060,68 @@ async function renderMathExpression(tex, displayMode = false, element = null) {
 				katexError.message,
 			);
 
+		// Only log non-command-related errors to reduce console noise
+		if (!isInvalidCommand) {
+			console.warn("KaTeX rendering failed, falling back to custom parser:", katexError);
+			reportKaTeXError(tex, katexError);
+		}
+
+		// Define KaTeX options for fallback rendering
+		const fallbackKatexOptions = {
+			displayMode: displayMode,
+			throwOnError: false,
+			errorColor: "#cc0000",
+			strict: false,
+			trust: true,
+			output: "html",
+			macros: {},
+		};
+
 		// Try custom parser as fallback
 		try {
-			const simplified = customParser.simplify(cleanedTex);
+			let processedTex = cleanedTex;
+
+			// If we have an invalid command, try to handle it gracefully
+			if (isInvalidCommand) {
+				// Try to extract the command name for better error reporting
+				const commandMatch = katexError.message.match(/Undefined control sequence: \\?([a-zA-Z]+)/);
+				if (commandMatch) {
+					const command = commandMatch[1];
+					console.warn(`[WebTeX] Undefined command: \\${command}. Using fallback rendering.`);
+
+					// Add the undefined command to macros to prevent further errors
+					fallbackKatexOptions.macros[`\\${command}`] = `\\text{\\${command}}`;
+
+					// Replace the undefined command with text representation
+					// First, handle commands with arguments: \command{arg}
+					processedTex = processedTex.replace(
+						new RegExp(`\\\\${command}\\s*\\{([^}]*)\\}`, "g"),
+						`\\\\text{\\${command}{$1}}`,
+					);
+					// Then handle standalone commands: \command
+					processedTex = processedTex.replace(
+						new RegExp(`\\\\${command}(?![a-zA-Z])`, "g"),
+						`\\\\text{\\${command}}`,
+					);
+				}
+			}
+
+			const simplified = customParser.simplify(processedTex);
 			const processedSimplified = handleUnicodeInMath(simplified);
 
-			// Use KaTeX in non-strict mode for the fallback
+			// Try rendering with the custom parser first
+			const customResult = customParser.renderFallback(processedSimplified, displayMode);
+			if (customResult) {
+				if (element) {
+					element.innerHTML = customResult;
+				}
+				return { success: true, method: "custom-fallback", element };
+			}
+
+			// If custom parser fails, try KaTeX with fallback options
 			const rendered = katex.renderToString(processedSimplified, {
-				displayMode: isDisplayMath,
-				throwOnError: false,
-				errorColor: "inherit",
-				strict: false,
-				trust: true,
+				...fallbackKatexOptions,
+				displayMode: displayMode,
 			});
 
 			if (element) {
@@ -1249,7 +1130,7 @@ async function renderMathExpression(tex, displayMode = false, element = null) {
 			}
 
 			rendererState.customParserFallback++;
-			return { success: true, method: "custom", element };
+			return { success: true, method: "katex-fallback", element };
 		} catch (customError) {
 			console.warn("Custom parser fallback failed:", customError);
 
