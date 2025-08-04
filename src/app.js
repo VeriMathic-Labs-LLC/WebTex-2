@@ -354,15 +354,22 @@ function fixIncompleteCommands(str) {
     const SUBSCRIPT_TOKEN = "(?:\\\\[a-zA-Z]+|[^_\\\\\s{}]+)";
     const reSubNoBraceEnd = new RegExp(`\\\\int_${SUBSCRIPT_TOKEN}\\^\\s*$`, "g");
     const reSubNoBraceToken = new RegExp(`\\\\int_${SUBSCRIPT_TOKEN}\\^(?!\\s*\\{)`, "g");
-    str = str.replace(reSubNoBraceEnd, (_m) => _m.replace(/\\int_/, "\\int_{").replace(/\^/, "}^{}"));
-    str = str.replace(reSubNoBraceToken, (_m) => _m.replace(/\\int_/, "\\int_{").replace(/\^/, "}^{}"));
+    str = str.replace(reSubNoBraceEnd, (_m) => _m.replace(/\\int_/, "\\int_{").replace(/\^/, "}^{\\,}"));
+    str = str.replace(reSubNoBraceToken, (_m) => _m.replace(/\\int_/, "\\int_{").replace(/\^/, "}^{\\,}"));
 
     // \int_0^{  (missing closing brace on superscript)
     const reSubMissingBrace = new RegExp(`\\\\int_${SUBSCRIPT_TOKEN}\\^\\{[^}]*$`, "g");
     str = str.replace(reSubMissingBrace, (_m) => {
-        return _m.replace(/\\int_/, "\\int_{").replace(/\^\{[^}]*$/, "}^{}");
+        return _m.replace(/\\int_/, "\\int_{").replace(/\^\{[^}]*$/, "}^{\\,}");
     });
 
+    // --- Generic: caret without superscript right before math delimiter or end
+    // e.g., "^$", "^\\)" or "^" at string end
+    // Insert a thin space (\\,) as placeholder so KaTeX accepts the group.
+    str = str.replace(/\^\s*(?=(?:\$|\\\\\)|\\\\\]|$))/g, "^{\\,}");
+
+    // Finally, convert any remaining empty superscript braces to a thin space placeholder
+    str = str.replace(/\^\{\}/g, "^{\\,}");
     return str;
 }
 // --------------------------------------------------
