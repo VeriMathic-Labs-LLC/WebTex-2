@@ -363,6 +363,12 @@ function fixIncompleteCommands(str) {
         return _m.replace(/\\int_/, "\\int_{").replace(/\^\{[^}]*$/, "}^{\\,}");
     });
 
+    // --- Unmatched \left ... \right handling
+    // Replace standalone \left(, \left[, etc. without matching \right with regular delimiters
+    str = str.replace(/\\left\s*([\(\[\{\|\.])/g, "$1");
+    // Replace standalone \right), \right], etc. without matching \left
+    str = str.replace(/\\right\s*([\)\]\}\|\.])/g, "$1");
+
     // --- Generic: caret without superscript right before math delimiter or end
     // e.g., "^$", "^\\)" or "^" at string end
     // Insert a thin space (\\,) as placeholder so KaTeX accepts the group.
