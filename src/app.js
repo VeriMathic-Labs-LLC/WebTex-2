@@ -317,6 +317,7 @@ function cleanupEmptyBraces(str) {
 	str = str.replace(/\{\}\{\}\{\}(?!\^)/g, "");
 	str = str.replace(/\{\}\{\}\{\}\{\}(?!\^)/g, "");
 	str = str.replace(/\{\}\{\}/g, "");
+	str = str.replace(/{}(?!\^)/g, ""); // Remove single empty braces not followed by ^
 	return str;
 }
 
@@ -559,25 +560,13 @@ class CustomLatexParser {
 		return str;
 	}
 
-	// Helper method to clean up empty braces that cause delimiter balance issues
-	cleanupEmptyBraces(str) {
-		// Remove empty braces that cause delimiter balance issues
-		str = str.replace(/\{\}\{\}\{\}\^/g, "^"); // Remove three empty braces followed by ^
-		str = str.replace(/\{\}\{\}\^/g, "^"); // Remove two empty braces followed by ^
-		str = str.replace(/\{\}\^/g, "^"); // Remove one empty brace followed by ^
-		str = str.replace(/\{\}\{\}(?!\^)/g, ""); // Remove pairs of empty braces not followed by ^
-		str = str.replace(/\{\}\{\}\{\}(?!\^)/g, ""); // Remove triplets of empty braces not followed by ^
-		str = str.replace(/\{\}\{\}\{\}\{\}(?!\^)/g, ""); // Remove quadruplets of empty braces not followed by ^
-		str = str.replace(/\{\}\{\}/g, ""); // Clean up remaining empty brace pairs
-		str = str.replace(/\{\}(?!\^)/g, ""); // Remove single empty braces not followed by ^
-		return str;
-	}
+
 
 	processNuclearNotation(str) {
 		// Enhanced nuclear notation processing with better error handling
 
 		// First, clean up any existing malformed patterns
-		str = this.cleanupEmptyBraces(str);
+		str = cleanupEmptyBraces(str);
 
 		// Handle specific nuclear notation patterns in \text{} commands
 		// Pattern: \text{{}^{A}N} -> {}^{A}\text{N}
@@ -630,7 +619,7 @@ class CustomLatexParser {
 		str = str.replace(/\{(\^\{[^}]+\})\}/g, "{$1}");
 
 		// Final cleanup using the helper method
-		str = this.cleanupEmptyBraces(str);
+		str = cleanupEmptyBraces(str);
 
 		return str;
 	}
@@ -696,7 +685,7 @@ class CustomLatexParser {
 
 		// Fix unmatched braces in expressions
 		str = this.fixUnmatchedBraces(str);
-		str = this.cleanupEmptyBraces(str);
+		str = cleanupEmptyBraces(str);
 
 		return str;
 	}
@@ -961,7 +950,7 @@ async function renderMathExpression(tex, displayMode = false, element = null) {
 	let cleanedTex = tex.trim();
 
 	// Clean up multiple consecutive empty braces that cause delimiter balance issues
-	cleanedTex = customParser.cleanupEmptyBraces(cleanedTex);
+	cleanedTex = cleanupEmptyBraces(cleanedTex);
 
 	// Handle display mode delimiters
 	const isDisplayMath =

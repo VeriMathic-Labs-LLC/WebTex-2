@@ -50,8 +50,9 @@ return `\\text{${inner}}`;
 - Better handling of specific patterns
 - Removed duplicate regex patterns
 
-### 3. Added `cleanupEmptyBraces` helper method
-- Extracted common empty brace cleanup logic into reusable method
+### 3. Fixed `cleanupEmptyBraces` function usage
+- Removed duplicate method definition inside CustomLatexParser class
+- Fixed all method calls to use the existing standalone `cleanupEmptyBraces` function
 - Eliminates code duplication across multiple methods
 - Centralizes the cleanup logic for better maintainability
 
@@ -78,7 +79,7 @@ After these fixes:
 ## Code Quality Improvements
 
 ### 1. Eliminated Code Duplication
-- Extracted `cleanupEmptyBraces` helper method to remove duplicate regex patterns
+- Fixed `cleanupEmptyBraces` function usage to remove duplicate method definition
 - Centralized empty brace cleanup logic for better maintainability
 - Reduced code duplication across `processNuclearNotation`, `processTypoFixes`, and `renderMathExpression`
 
@@ -88,9 +89,10 @@ After these fixes:
 - More flexible error handling that adapts to different KaTeX error messages
 
 ### 3. Better Code Organization
-- Separated concerns by extracting helper methods
+- Fixed method call contexts to use proper function references
 - Improved readability and maintainability
 - Made the code more modular and testable
+- Fixed regex pattern escaping for better readability
 
 ## Files Modified
 
