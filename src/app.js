@@ -616,6 +616,9 @@ class CustomLatexParser {
 		// Fix nuclear notation format: {^{A}} -> {}^{A}
 		str = str.replace(/\{(\^\{[^}]+\})\}/g, "{$1}");
 
+		// Pattern: \text{^{A}\text{N}} -> {}^{A}\text{N}
+		str = str.replace(/\\text\{\\\^\{([^}]+)\}\\text\{([^}]*)\}\}/g, "{}^{$1}\\text{$2}");
+
 		// Final cleanup using the helper method
 		str = cleanupEmptyBraces(str);
 
