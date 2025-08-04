@@ -1,20 +1,23 @@
 // Test script to verify that the specific problematic expressions are fixed
 
 function testSpecificIssues() {
+	// Remove sequences of empty braces that cause delimiter balance issues
+	function cleanupEmptyBraces(str) {
+		str = str.replace(/\{\}\{\}\{\}\^/g, "^");
+		str = str.replace(/\{\}\{\}\^/g, "^");
+		str = str.replace(/\{\}\^/g, "^");
+		str = str.replace(/\{\}\{\}(?!\^)/g, "");
+		str = str.replace(/\{\}\{\}\{\}(?!\^)/g, "");
+		str = str.replace(/\{\}\{\}\{\}\{\}(?!\^)/g, "");
+		str = str.replace(/\{\}\{\}/g, "");
+		return str;
+	}
+
 	// Simulate the complete processing pipeline
 	function processExpression(str) {
 		// Initial brace fix to mimic extension preprocessing
 		str = fixUnmatchedBraces(str);
-		// Clean up multiple consecutive empty braces that cause delimiter balance issues
-		// Handle the specific case where empty braces are followed by superscripts
-		str = str.replace(/\{\}\{\}\{\}\^/g, "^"); // Remove three empty braces followed by ^
-		str = str.replace(/\{\}\{\}\^/g, "^"); // Remove two empty braces followed by ^
-		str = str.replace(/\{\}\^/g, "^"); // Remove one empty brace followed by ^
-
-		// Clean up other consecutive empty braces
-		str = str.replace(/\{\}\{\}(?!\^)/g, ""); // Remove pairs of empty braces not followed by ^
-		str = str.replace(/\{\}\{\}\{\}(?!\^)/g, ""); // Remove triplets of empty braces not followed by ^
-		str = str.replace(/\{\}\{\}\{\}\{\}(?!\^)/g, ""); // Remove quadruplets of empty braces not followed by ^
+		str = cleanupEmptyBraces(str);
 
 		// Simulate nuclear physics processing
 		str = str.replace(
@@ -32,22 +35,13 @@ function testSpecificIssues() {
 		);
 
 		// Clean up again after processing
-		str = str.replace(/\{\}\{\}\{\}\^/g, "^"); // Remove three empty braces followed by ^
-		str = str.replace(/\{\}\{\}\^/g, "^"); // Remove two empty braces followed by ^
-		str = str.replace(/\{\}\^/g, "^"); // Remove one empty brace followed by ^
-
-		// Clean up other consecutive empty braces
-		str = str.replace(/\{\}\{\}(?!\^)/g, ""); // Remove pairs of empty braces not followed by ^
-		str = str.replace(/\{\}\{\}\{\}(?!\^)/g, ""); // Remove triplets of empty braces not followed by ^
-		str = str.replace(/\{\}\{\}\{\}\{\}(?!\^)/g, ""); // Remove quadruplets of empty braces not followed by ^
+		str = cleanupEmptyBraces(str);
 
 		// Fix nuclear notation format: {^{A}} -> {}^{A}
 		str = str.replace(/\{(\^\{[^}]+\})\}/g, "{$1}");
 
-		// Clean up remaining empty brace pairs that might be left
-		str = str.replace(/\{\}\{\}/g, "");
-
-		// Fix unmatched braces to prevent KaTeX parse errors
+		// Final cleanup and brace fix
+		str = cleanupEmptyBraces(str);
 		str = fixUnmatchedBraces(str);
 
 		return str;
@@ -93,15 +87,7 @@ function testSpecificIssues() {
 			openCount--;
 		}
 
-		// Same empty brace cleanup used in the extension
-		result = result.replace(/\{\}\{\}\{\}\^/g, "^");
-		result = result.replace(/\{\}\{\}\^/g, "^");
-		result = result.replace(/\{\}\^/g, "^");
-		result = result.replace(/\{\}\{\}(?!\^)/g, "");
-		result = result.replace(/\{\}\{\}\{\}(?!\^)/g, "");
-		result = result.replace(/\{\}\{\}\{\}\{\}(?!\^)/g, "");
-
-		return result;
+		return cleanupEmptyBraces(result);
 	}
 
 	// Test cases for the specific issues
@@ -119,8 +105,14 @@ function testSpecificIssues() {
 			shouldBeBalanced: true,
 		},
 		{
-			input: "\\int_{-\\infty}^{\\infty} e^{-x^2} dx = \\sqrt{\\pi",
-			description: "Expression missing closing brace",
+			input: "\\sqrt{\\pi",
+			description: "Expression missing one closing brace",
+			shouldHaveEmptyBraces: false,
+			shouldBeBalanced: true,
+		},
+		{
+			input: "\\int_{-\\infty}^{\\infty e^{-x^2} dx = \\sqrt{\\pi",
+			description: "Expression missing two closing braces",
 			shouldHaveEmptyBraces: false,
 			shouldBeBalanced: true,
 		},
