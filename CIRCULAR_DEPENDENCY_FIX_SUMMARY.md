@@ -61,6 +61,13 @@ function fixUnmatchedBraces(str) {
 4. **Better Separation of Concerns:** Each function has a single, clear responsibility
 5. **Easier Testing:** The functions can be tested independently without hidden side effects
 
+## Additional Optimization
+
+After the initial refactoring, a redundant consecutive cleanup call was identified and removed:
+- **Before:** Two consecutive `cleanupEmptyBraces()` calls (lines 73 and 75)
+- **After:** Single cleanup call followed by brace fixing
+- **Result:** Improved performance without affecting functionality
+
 ## Verification
 
 All tests continue to pass after the refactoring:
@@ -74,7 +81,8 @@ All tests continue to pass after the refactoring:
 
 1. **`test-specific-issues.js`:**
    - Removed internal `cleanupEmptyBraces()` call from `fixUnmatchedBraces()`
-   - Added explicit cleanup calls in `processExpression()`
+   - Added explicit cleanup calls in `processExpression()` where needed
+   - Removed redundant consecutive cleanup calls to improve performance
 
 2. **`src/app.js`:**
    - Removed internal `cleanupEmptyBraces()` call from `fixUnmatchedBraces()` method

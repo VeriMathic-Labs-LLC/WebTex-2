@@ -72,7 +72,6 @@ function testSpecificIssues() {
 		// Final cleanup and brace fix
 		str = cleanupEmptyBraces(str);
 		str = fixUnmatchedBraces(str);
-		str = cleanupEmptyBraces(str); // Final cleanup after brace fixing
 
 		return str;
 	}
