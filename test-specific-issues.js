@@ -1,5 +1,17 @@
 // Test script to verify that the specific problematic expressions are fixed
 
+// Remove sequences of empty braces that cause delimiter balance issues
+function cleanupEmptyBraces(str) {
+	str = str.replace(/\{\}\{\}\{\}\^/g, "^");
+	str = str.replace(/\{\}\{\}\^/g, "^");
+	str = str.replace(/\{\}\^/g, "^");
+	str = str.replace(/\{\}\{\}(?!\^)/g, "");
+	str = str.replace(/\{\}\{\}\{\}(?!\^)/g, "");
+	str = str.replace(/\{\}\{\}\{\}\{\}(?!\^)/g, "");
+	str = str.replace(/\{\}\{\}/g, "");
+	return str;
+}
+
 // Helper to fix unmatched braces similar to extension logic
 function fixUnmatchedBraces(str) {
 	let result = str;
@@ -24,19 +36,8 @@ function fixUnmatchedBraces(str) {
 		openCount--;
 	}
 
-	return result;
-}
-
-// Remove sequences of empty braces that cause delimiter balance issues
-function cleanupEmptyBraces(str) {
-	str = str.replace(/\{\}\{\}\{\}\^/g, "^");
-	str = str.replace(/\{\}\{\}\^/g, "^");
-	str = str.replace(/\{\}\^/g, "^");
-	str = str.replace(/\{\}\{\}(?!\^)/g, "");
-	str = str.replace(/\{\}\{\}\{\}(?!\^)/g, "");
-	str = str.replace(/\{\}\{\}\{\}\{\}(?!\^)/g, "");
-	str = str.replace(/\{\}\{\}/g, "");
-	return str;
+	// Apply cleanup after fixing braces to maintain expected behavior
+	return cleanupEmptyBraces(result);
 }
 
 function testSpecificIssues() {
