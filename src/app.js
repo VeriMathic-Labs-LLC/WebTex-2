@@ -317,7 +317,10 @@ function cleanupEmptyBraces(str) {
 	str = str.replace(/\{\}\{\}\{\}(?!\^)/g, "");
 	str = str.replace(/\{\}\{\}\{\}\{\}(?!\^)/g, "");
 	str = str.replace(/\{\}\{\}/g, "");
-	str = str.replace(/\{\}(?!\^)/g, ""); // Remove single empty braces not followed by ^
+	// Remove single empty braces not followed by ^ ONLY if they are not part of a required command argument (e.g., \\text{})
+	// We achieve this by ensuring the braces are NOT immediately preceded by a backslash followed by letters (a LaTeX command)
+	// Example kept: "\\text{}" => should stay. Example removed: "{}^2" => becomes "^2".
+	str = str.replace(/(^|[^\\a-zA-Z])\{\}(?!\^)/g, "$1");
 	return str;
 }
 
