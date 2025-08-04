@@ -485,8 +485,11 @@ class CustomLatexParser {
 	}
 
 	processFractionNotation(str) {
+		// First, protect existing \frac commands to avoid breaking them
+		str = str.replace(/\\frac/g, "\\FRAC_TEMP");
+		
 		// Fix malformed fractions by ensuring they have two braced arguments
-		str = str.replace(/\\frac(?![{[])/g, (match, offset) => {
+		str = str.replace(/\\FRAC_TEMP(?![{[])/g, (match, offset) => {
 			const following = str.slice(offset + match.length);
 			// Check for content that needs to be wrapped in braces
 			const arg1Match = following.match(/^([^{[]|[\d\w]+)/);
@@ -496,7 +499,7 @@ class CustomLatexParser {
 				const arg2Match = rest.match(/^([^{[]|[\d\w]+)/);
 				if (arg2Match) {
 					const arg2 = arg2Match[0];
-					return `\\frac{${arg1}}{${arg2}}`;
+					return `\\FRAC_TEMP{${arg1}}{${arg2}}`;
 				}
 			}
 			return match; // Return original if no fix is applied
@@ -505,39 +508,44 @@ class CustomLatexParser {
 		// Fix missing braces around denominator like \frac{a}{b + c}d → wrap single token
 		// But be careful not to break expressions with nested braces or superscripts
 		str = str.replace(
-			/\\frac\{([^{}]+)\}([^{}\s])/g,
+			/\\FRAC_TEMP\{([^{}]+)\}([^{}\s])/g,
 			(_m, num, following) => {
 				// Only fix if the following character is not part of a superscript or subscript
 				// and if the numerator doesn't end with a superscript/subscript
 				if (!/[\^_]/.test(num.slice(-1)) && !/[\^_]/.test(following)) {
-					return `\\frac{${num}}{${following}}`;
+					return `\\FRAC_TEMP{${num}}{${following}}`;
 				}
 				return _m; // Return original if it might break superscripts/subscripts
 			},
 		);
 
 		// Handle incomplete fractions at the end of expressions
-		str = str.replace(/\\frac\{([^}]+)\}\{([^}]*)(?:\s*)$/g, "\\frac{$1}{$2}");
+		str = str.replace(/\\FRAC_TEMP\{([^}]+)\}\{([^}]*)(?:\s*)$/g, "\\FRAC_TEMP{$1}{$2}");
 
 		// Handle fractions with missing closing brace in numerator
-		str = str.replace(/\\frac\{([^}]*)(?:\s*)$/g, "\\frac{$1}{}");
+		str = str.replace(/\\FRAC_TEMP\{([^}]*)(?:\s*)$/g, "\\FRAC_TEMP{$1}{}");
 
-		// rac{num}{den}
-		str = str.replace(/(?:\\f?rac|rac)\{([^}]+)\}\{([^}]+)\}/g, "\\frac{$1}{$2}");
+		// rac{num}{den} - convert rac to \frac
+		str = str.replace(/rac\{([^}]+)\}\{([^}]+)\}/g, "\\frac{$1}{$2}");
+		
 		// rac27 pattern
 		str = str.replace(/\brac(\d)(\d+)/g, (_, a, b) => `\\frac{${a}}{${b}}`);
-		// standalone rac
+		
+		// standalone rac - convert to \frac
 		str = str.replace(/\brac\b/g, "\\frac");
 
 		// Fix fractions with double braces
-		str = str.replace(/\\frac\{\{([^}]+)\}\}\{\{([^}]+)\}\}/g, "\\frac{$1}{$2}");
+		str = str.replace(/\\FRAC_TEMP\{\{([^}]+)\}\}\{\{([^}]+)\}\}/g, "\\FRAC_TEMP{$1}{$2}");
 
 		// Fix malformed fractions with superscripts in numerator
 		// Handle cases like \frac{\pi^{2}{6} -> \frac{\pi^{2}}{6}
-		str = str.replace(/\\frac\{([^}]*\^\{[^}]*\})\{([^}]*)\}/g, "\\frac{$1}{$2}");
+		str = str.replace(/\\FRAC_TEMP\{([^}]*\^\{[^}]*\})\{([^}]*)\}/g, "\\FRAC_TEMP{$1}{$2}");
 
 		// Fix fractions where the closing brace is missing after superscripts
-		str = str.replace(/\\frac\{([^}]*\^\{[^}]*\})\s*([^{}\s])/g, "\\frac{$1}{$2}");
+		str = str.replace(/\\FRAC_TEMP\{([^}]*\^\{[^}]*\})\s*([^{}\s])/g, "\\FRAC_TEMP{$1}{$2}");
+
+		// Finally, restore \frac commands
+		str = str.replace(/\\FRAC_TEMP/g, "\\frac");
 
 		return str;
 	}
