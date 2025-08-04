@@ -317,6 +317,7 @@ function cleanupEmptyBraces(str) {
 	str = str.replace(/\{\}\{\}\{\}(?!\^)/g, "");
 	str = str.replace(/\{\}\{\}\{\}\{\}(?!\^)/g, "");
 	str = str.replace(/\{\}\{\}/g, "");
+	str = str.replace(/\{\}(?!\^)/g, ""); // Remove single empty braces not followed by ^
 	return str;
 }
 
@@ -560,40 +561,27 @@ class CustomLatexParser {
 	}
 
 	processNuclearNotation(str) {
-		// Enhanced nuclear notation processing
+		// Enhanced nuclear notation processing with better error handling
 
-		// Handle \text{{}^{A}N} patterns - remove \text wrapper for nuclear notation
-		str = str.replace(
-			/\\text\{(\{\})?(\^\{[^}]+\})?(_\{[^}]+\})?([^}]*)\}/g,
-			(match, _empty, sup, sub, rest) => {
-				if (sup || sub) {
-					// This is nuclear notation inside \text{}, extract it
-					// Create proper nuclear notation format
-					let notation = "";
-					if (sup) notation += sup;
-					if (sub) notation += sub;
-					return `{${notation}}\\text{${rest.trim()}}`;
-				}
-				return match;
-			},
-		);
+		// First, clean up any existing malformed patterns
+		str = cleanupEmptyBraces(str);
 
-		// Basic nuclear notation: \text{_Z^A X} -> {}^{A}_{Z}\text{X}
+		// Handle specific nuclear notation patterns in \text{} commands
+		// Pattern: \text{{}^{A}N} -> {}^{A}\text{N}
+		str = str.replace(/\\text\{\{\}\^\{([^}]+)\}([^}]*)\}/g, "{}^{$1}\\text{$2}");
+		
+		// Pattern: \text{{}^{A}_{Z}N} -> {}^{A}_{Z}\text{N}
+		str = str.replace(/\\text\{\{\}\^\{([^}]+)\}_\{([^}]+)\}([^}]*)\}/g, "{}^{$1}_{$2}\\text{$3}");
+
+		// Pattern: \text{_Z^A X} -> {}^{A}_{Z}\text{X}
 		str = str.replace(/\\text\{_(\d+)\^(\d+)\s+([^}]+)\}/g, "{}^{$2}_{$1}\\text{$3}");
-
-		// Nuclear notation with variables: \text{_Z^A N} -> {}^{A}_{Z}\text{N}
 		str = str.replace(/\\text\{_([A-Z])\^([A-Z])\s+([^}]+)\}/g, "{}^{$2}_{$1}\\text{$3}");
 
-		// Complex nuclear notation: \text{{Z-2}^{A-4} N'} -> {}^{A-4}_{Z-2}\text{N'}
+		// Pattern: \text{{Z-2}^{A-4} N'} -> {}^{A-4}_{Z-2}\text{N'}
 		str = str.replace(/\\text\{\{([^}]+)\}\^\{([^}]+)\}\s+([^}]+)\}/g, "{}^{$2}_{$1}\\text{$3}");
 
-		// Alternative notation: ^{A}_{Z}\text{N}
+		// Handle already formatted notation: ^{A}_{Z}\text{N} and ^{A}{Z}\text{N}
 		str = str.replace(/\^\{([^}]+)\}_\{([^}]+)\}\\text\{([^}]+)\}/g, "{}^{$1}_{$2}\\text{$3}");
-
-		// Handle already formatted notation: ^{A}{Z}\text{N} -> {}^{A}_{Z}\text{N}
-		str = str.replace(/\^\{([^}]+)\}\{([^}]+)\}\\text\{([^}]+)\}/g, "{}^{$1}_{$2}\\text{$3}");
-
-		// Handle the specific pattern from your examples: ^{A}{Z}\text{N}
 		str = str.replace(/\^\{([^}]+)\}\{([^}]+)\}\\text\{([^}]+)\}/g, "{}^{$1}_{$2}\\text{$3}");
 
 		// e^- and e^+ patterns - both inside and outside \text{}
@@ -625,22 +613,11 @@ class CustomLatexParser {
 		// Handle cases like {}^{A}_{Z+1}\text{N'} + e^{-} + \overline{\nu}
 		str = str.replace(/\{\}\^\{([^}]+)\}_\{([^}]+)\}\\text\{([^}]+)\}/g, "{}^{$1}_{$2}\\text{$3}");
 
-		// Clean up multiple consecutive empty braces that cause delimiter balance issues
-		// Handle the specific case where empty braces are followed by superscripts
-		str = str.replace(/\{\}\{\}\{\}\^/g, "^"); // Remove three empty braces followed by ^
-		str = str.replace(/\{\}\{\}\^/g, "^"); // Remove two empty braces followed by ^
-		str = str.replace(/\{\}\^/g, "^"); // Remove one empty brace followed by ^
-
-		// Clean up other consecutive empty braces
-		str = str.replace(/\{\}\{\}(?!\^)/g, ""); // Remove pairs of empty braces not followed by ^
-		str = str.replace(/\{\}\{\}\{\}(?!\^)/g, ""); // Remove triplets of empty braces not followed by ^
-		str = str.replace(/\{\}\{\}\{\}\{\}(?!\^)/g, ""); // Remove quadruplets of empty braces not followed by ^
-
 		// Fix nuclear notation format: {^{A}} -> {}^{A}
 		str = str.replace(/\{(\^\{[^}]+\})\}/g, "{$1}");
 
-		// Clean up remaining empty brace pairs that might be left
-		str = str.replace(/\{\}\{\}/g, "");
+		// Final cleanup using the helper method
+		str = cleanupEmptyBraces(str);
 
 		return str;
 	}
@@ -663,9 +640,9 @@ class CustomLatexParser {
 	}
 
 	processTextWrappers(str) {
-		// Enhanced \text{} processing
+		// Enhanced \text{} processing - avoid nesting \mathrm inside \text
 		return str.replace(/\\text\{([^{}]+)\}/g, (_m, inner) => {
-			// Special patterns that should be kept in \text{}
+			// Special patterns that should be kept in \text{} as-is
 			const keepPatterns = [
 				/^[A-Z]'?$/, // Single uppercase letter possibly with prime (e.g., N, N')
 				/^[a-z]'?$/, // Single lowercase letter possibly with prime
@@ -674,20 +651,20 @@ class CustomLatexParser {
 				/^\w+['*]?$/, // Words with possible prime or star
 			];
 
-			// Check if we should keep \text{}
+			// Check if we should keep \text{} as-is
 			for (const pattern of keepPatterns) {
 				if (pattern.test(inner)) {
-					return `\\mathrm{${inner}}`; // Use \mathrm instead of \text
+					return `\\text{${inner}}`; // Keep as \text{} to avoid nesting issues
 				}
 			}
 
-			// For simple math expressions, remove \text{}
+			// For simple math expressions, remove \text{} wrapper
 			if (/^[A-Za-z0-9_+\-*/=().,\s]+$/.test(inner)) {
 				return inner;
 			}
 
-			// For everything else, convert to \mathrm
-			return `\\mathrm{${inner}}`;
+			// For everything else, keep as \text{} to avoid nesting \mathrm inside \text
+			return `\\text{${inner}}`;
 		});
 	}
 
@@ -971,15 +948,7 @@ async function renderMathExpression(tex, displayMode = false, element = null) {
 	let cleanedTex = tex.trim();
 
 	// Clean up multiple consecutive empty braces that cause delimiter balance issues
-	// Handle the specific case where empty braces are followed by superscripts
-	cleanedTex = cleanedTex.replace(/\{\}\{\}\{\}\^/g, "^"); // Remove three empty braces followed by ^
-	cleanedTex = cleanedTex.replace(/\{\}\{\}\^/g, "^"); // Remove two empty braces followed by ^
-	cleanedTex = cleanedTex.replace(/\{\}\^/g, "^"); // Remove one empty brace followed by ^
-
-	// Clean up other consecutive empty braces
-	cleanedTex = cleanedTex.replace(/\{\}\{\}(?!\^)/g, ""); // Remove pairs of empty braces not followed by ^
-	cleanedTex = cleanedTex.replace(/\{\}\{\}\{\}(?!\^)/g, ""); // Remove triplets of empty braces not followed by ^
-	cleanedTex = cleanedTex.replace(/\{\}\{\}\{\}\{\}(?!\^)/g, ""); // Remove quadruplets of empty braces not followed by ^
+	cleanedTex = cleanupEmptyBraces(cleanedTex);
 
 	// Handle display mode delimiters
 	const isDisplayMath =
@@ -1024,137 +993,148 @@ async function renderMathExpression(tex, displayMode = false, element = null) {
 		return { success: false, method: "unbalanced", element };
 	}
 
-	// Try KaTeX first with the original text
-	try {
-		// Preprocess with custom parser
-		let processedTex = cleanedTex;
-		if (customParser.canHandle(cleanedTex)) {
-			try {
-				processedTex = customParser.simplify(cleanedTex);
-			} catch (simplifyError) {
-				console.warn("Error in custom parser simplification:", simplifyError);
-				// Continue with original text if simplification fails
-			}
-		}
-
-		// Handle Unicode characters
-		processedTex = handleUnicodeInMath(processedTex);
-
-		// Configure KaTeX options
-		const katexOptions = {
-			displayMode: isDisplayMath,
-			errorColor: "inherit",
-			strict: (errorCode) => {
-				// Handle specific error codes to reduce warnings
-				if (errorCode === "newLineInDisplayMode") {
-					// In display mode, newlines are ignored, so we can safely ignore this warning
-					return "ignore";
-				}
-				// For other errors, warn but continue
-				return "warn";
-			},
-			trust: (context) => {
-				// Allow common commands that need trust
-				const trustedCommands = [
-					"\\href",
-					"\\url",
-					"\\includegraphics",
-					"\\htmlId",
-					"\\htmlClass",
-					"\\htmlData",
-					"\\htmlStyle",
-					"\\class",
-					"\\id",
-					"\\data",
-					"\\style",
-				];
-				if (trustedCommands.includes(context.command)) {
-					return true;
-				}
-				// Allow specific protocols in URLs
-				if (["href", "url", "includegraphics"].includes(context.command)) {
-					const safeProtocols = ["http", "https", "data", "mailto", "ftp"];
-					return safeProtocols.some((proto) => context.url.startsWith(proto));
-				}
-				return false;
-			},
-			macros: {
-				"\\RR": "\\mathbb{R}",
-				"\\NN": "\\mathbb{N}",
-				"\\ZZ": "\\mathbb{Z}",
-				"\\QQ": "\\mathbb{Q}",
-				"\\CC": "\\mathbb{C}",
-				"\\half": "\\frac{1}{2}",
-				"\\quarter": "\\frac{1}{4}",
-				"\\third": "\\frac{1}{3}",
-				"\\twothirds": "\\frac{2}{3}",
-				"\\threequarters": "\\frac{3}{4}",
-				"\\to": "\\rightarrow",
-				"\\rac": "\\frac",
-				"\\qed": "\\quad \\blacksquare",
-				"\\abs": "\\left|#1\\right|",
-				"\\norm": "\\left\\|#1\\right\\|",
-				"\\set": "\\left\\{#1\\right\\}",
-				"\\paren": "\\left(#1\\right)",
-				"\\brack": "\\left[#1\\right]",
-				"\\eval": "\\left.#1\\right|_{#2}",
-			},
-			maxSize: 1000,
-			maxExpand: 1000,
-			maxCharacterCount: 10000,
-			throwOnError: true,
-		};
-
-		// Try rendering with KaTeX
-		const rendered = katex.renderToString(processedTex, katexOptions);
-		rendererState.katexSuccess++;
-
-		if (element) {
-			element.innerHTML = rendered;
-			element.classList.add("webtex-katex-rendered");
-		}
-
-		return { success: true, method: "katex", element };
-	} catch (katexError) {
-		console.warn("KaTeX rendering failed, falling back to custom parser:", katexError);
-		reportKaTeXError(tex, katexError);
-
-		// Try custom parser as fallback
+			// Try KaTeX first with the original text
 		try {
-			const simplified = customParser.simplify(cleanedTex);
-			const processedSimplified = handleUnicodeInMath(simplified);
+			// Preprocess with custom parser
+			let processedTex = cleanedTex;
+			if (customParser.canHandle(cleanedTex)) {
+				try {
+					processedTex = customParser.simplify(cleanedTex);
+				} catch (simplifyError) {
+					console.warn("Error in custom parser simplification:", simplifyError);
+					// Continue with original text if simplification fails
+				}
+			}
 
-			// Use KaTeX in non-strict mode for the fallback
-			const rendered = katex.renderToString(processedSimplified, {
+			// Handle Unicode characters
+			processedTex = handleUnicodeInMath(processedTex);
+
+			// Configure KaTeX options
+			const katexOptions = {
 				displayMode: isDisplayMath,
-				throwOnError: false,
 				errorColor: "inherit",
-				strict: false,
-				trust: true,
-			});
+				strict: (errorCode) => {
+					// Handle specific error codes to reduce warnings
+					if (errorCode === "newLineInDisplayMode") {
+						// In display mode, newlines are ignored, so we can safely ignore this warning
+						return "ignore";
+					}
+					// For other errors, warn but continue
+					return "warn";
+				},
+				trust: (context) => {
+					// Allow common commands that need trust
+					const trustedCommands = [
+						"\\href",
+						"\\url",
+						"\\includegraphics",
+						"\\htmlId",
+						"\\htmlClass",
+						"\\htmlData",
+						"\\htmlStyle",
+						"\\class",
+						"\\id",
+						"\\data",
+						"\\style",
+					];
+					if (trustedCommands.includes(context.command)) {
+						return true;
+					}
+					// Allow specific protocols in URLs
+					if (["href", "url", "includegraphics"].includes(context.command)) {
+						const safeProtocols = ["http", "https", "data", "mailto", "ftp"];
+						return safeProtocols.some((proto) => context.url.startsWith(proto));
+					}
+					return false;
+				},
+				macros: {
+					"\\RR": "\\mathbb{R}",
+					"\\NN": "\\mathbb{N}",
+					"\\ZZ": "\\mathbb{Z}",
+					"\\QQ": "\\mathbb{Q}",
+					"\\CC": "\\mathbb{C}",
+					"\\half": "\\frac{1}{2}",
+					"\\quarter": "\\frac{1}{4}",
+					"\\third": "\\frac{1}{3}",
+					"\\twothirds": "\\frac{2}{3}",
+					"\\threequarters": "\\frac{3}{4}",
+					"\\to": "\\rightarrow",
+					"\\rac": "\\frac",
+					"\\qed": "\\quad \\blacksquare",
+					"\\abs": "\\left|#1\\right|",
+					"\\norm": "\\left\\|#1\\right\\|",
+					"\\set": "\\left\\{#1\\right\\}",
+					"\\paren": "\\left(#1\\right)",
+					"\\brack": "\\left[#1\\right]",
+					"\\eval": "\\left.#1\\right|_{#2}",
+				},
+				maxSize: 1000,
+				maxExpand: 1000,
+				maxCharacterCount: 10000,
+				throwOnError: true,
+			};
+
+			// Try rendering with KaTeX
+			const rendered = katex.renderToString(processedTex, katexOptions);
+			rendererState.katexSuccess++;
 
 			if (element) {
 				element.innerHTML = rendered;
-				element.classList.add("webtex-custom-rendered");
+				element.classList.add("webtex-katex-rendered");
 			}
 
-			rendererState.customParserFallback++;
-			return { success: true, method: "custom", element };
-		} catch (customError) {
-			console.warn("Custom parser fallback failed:", customError);
+			return { success: true, method: "katex", element };
+		} catch (katexError) {
+			console.warn("KaTeX rendering failed, falling back to custom parser:", katexError);
+			reportKaTeXError(tex, katexError);
 
-			// Final fallback - show original text with error styling
-			if (element) {
-				const fallbackElement = customParser.renderFallback(tex, isDisplayMath);
-				element.innerHTML = "";
-				element.appendChild(fallbackElement);
-				element.classList.add("webtex-error-fallback");
-				element.title = `Rendering failed: ${customError.message || "Unknown error"}`;
+			// Check if this is an invalid command error
+			const isInvalidCommand = katexError.message && /undefined control sequence|can't use function|unknown function|invalid\s*command/i.test(katexError.message);
+
+			// Try custom parser as fallback
+			try {
+				const simplified = customParser.simplify(cleanedTex);
+				const processedSimplified = handleUnicodeInMath(simplified);
+
+				// Use KaTeX in non-strict mode for the fallback
+				const rendered = katex.renderToString(processedSimplified, {
+					displayMode: isDisplayMath,
+					throwOnError: false,
+					errorColor: "inherit",
+					strict: false,
+					trust: true,
+				});
+
+				if (element) {
+					element.innerHTML = rendered;
+					element.classList.add("webtex-custom-rendered");
+				}
+
+				rendererState.customParserFallback++;
+				return { success: true, method: "custom", element };
+			} catch (customError) {
+				console.warn("Custom parser fallback failed:", customError);
+
+				// Final fallback - show original text with error styling
+				if (element) {
+					const fallbackElement = customParser.renderFallback(tex, isDisplayMath);
+					element.innerHTML = "";
+					element.appendChild(fallbackElement);
+					element.classList.add("webtex-error-fallback");
+					
+					// Provide more specific error information
+					let errorMessage = "Rendering failed";
+					if (isInvalidCommand) {
+						errorMessage = "Invalid LaTeX command";
+					} else if (customError.message) {
+						errorMessage = customError.message;
+					}
+					element.title = errorMessage;
+				}
+
+				return { success: false, method: "error", element, error: customError };
 			}
-
-			return { success: false, method: "error", element, error: customError };
 		}
-	}
 }
 
 /* -------------------------------------------------- */

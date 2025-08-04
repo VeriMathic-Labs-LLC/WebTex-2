@@ -1,0 +1,83 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>WebTeX Fix Test</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            max-width: 800px;
+            margin: 0 auto;
+            padding: 20px;
+            line-height: 1.6;
+        }
+        .test-case {
+            margin: 20px 0;
+            padding: 15px;
+            border: 1px solid #ddd;
+            border-radius: 5px;
+        }
+        .test-case h3 {
+            margin-top: 0;
+            color: #333;
+        }
+        .expected {
+            background: #f0f8ff;
+            padding: 10px;
+            border-radius: 3px;
+            margin-top: 10px;
+            font-size: 0.9em;
+        }
+        .error {
+            background: #ffe6e6;
+            color: #d32f2f;
+            padding: 10px;
+            border-radius: 3px;
+            margin-top: 10px;
+        }
+    </style>
+</head>
+<body>
+    <h1>WebTeX Fix Test</h1>
+    <p>Testing the fixes for KaTeX parsing errors.</p>
+
+    <div class="test-case">
+        <h3>Test 1: Nuclear Notation with \mathrm in text mode (FIXED)</h3>
+        <p>Original problematic expression: $\text{{}^{A}}\text{\mathrm{N}} \rightarrow ^{A}_{Z+1}\text{N'} + e^{-} + \overline{\nu}$</p>
+        <div class="expected">Expected: Should render without "Can't use function '\mathrm' in text mode" error</div>
+    </div>
+
+    <div class="test-case">
+        <h3>Test 2: Nuclear Notation with empty braces (FIXED)</h3>
+        <p>Expression: $\text{{}^{A}N} \rightarrow {}{}^{A-4}_{Z-2}\text{N'} + {}{}^{4}_{2}He$</p>
+        <div class="expected">Expected: Should render without "Unmatched delimiter: \right" error</div>
+    </div>
+
+    <div class="test-case">
+        <h3>Test 3: Nuclear Notation with unbalanced delimiters (FIXED)</h3>
+        <p>Expression: $\text{{}^{A}N} \rightarrow {}{}^{A}_{Z+1}\text{N'} + e^{-} + \overline{\nu}$</p>
+        <div class="expected">Expected: Should render without "Unbalanced delimiters" error</div>
+    </div>
+
+    <div class="test-case">
+        <h3>Test 4: Invalid command handling (FIXED)</h3>
+        <p>Expression: $\invalidcommand{x}$</p>
+        <div class="expected">Expected: Should show graceful fallback instead of crashing</div>
+    </div>
+
+    <div class="test-case">
+        <h3>Test 5: Basic nuclear notation</h3>
+        <p>Expression: $\text{_Z^A N} \to \text{{Z-2}^{A-4} N'} + \text{_2^4 He}$</p>
+        <div class="expected">Expected: Should render nuclear notation correctly</div>
+    </div>
+
+    <div class="test-case">
+        <h3>Test 6: Text with \mathrm (should work now)</h3>
+        <p>Expression: $\mathrm{normal} \mathit{italic} \mathbf{bold}$</p>
+        <div class="expected">Expected: Should render different font styles correctly</div>
+    </div>
+
+    <script type="module" src="build/app.js"></script>
+</body>
+</html>
