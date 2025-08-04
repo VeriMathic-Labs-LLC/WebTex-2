@@ -617,7 +617,12 @@ class CustomLatexParser {
 		str = str.replace(/\{\}\^\{([^}]+)\}_\{([^}]+)\}\\text\{([^}]+)\}/g, "{}^{$1}_{$2}\\text{$3}");
 
 		// Clean up multiple consecutive empty braces that cause delimiter balance issues
-		// But be careful not to remove braces that are part of valid nuclear notation
+		// Handle the specific case where empty braces are followed by superscripts
+		str = str.replace(/\{\}\{\}\{\}\^/g, "^"); // Remove three empty braces followed by ^
+		str = str.replace(/\{\}\{\}\^/g, "^"); // Remove two empty braces followed by ^
+		str = str.replace(/\{\}\^/g, "^"); // Remove one empty brace followed by ^
+		
+		// Clean up other consecutive empty braces
 		str = str.replace(/\{\}\{\}(?!\^)/g, ""); // Remove pairs of empty braces not followed by ^
 		str = str.replace(/\{\}\{\}\{\}(?!\^)/g, ""); // Remove triplets of empty braces not followed by ^
 		str = str.replace(/\{\}\{\}\{\}\{\}(?!\^)/g, ""); // Remove quadruplets of empty braces not followed by ^
@@ -728,7 +733,12 @@ class CustomLatexParser {
 		result = result.replace(/\}(\s*)\}/g, "}$1"); // Remove duplicate consecutive braces
 
 		// Clean up multiple consecutive empty braces that cause delimiter balance issues
-		// But be careful not to remove braces that are part of valid nuclear notation
+		// Handle the specific case where empty braces are followed by superscripts
+		result = result.replace(/\{\}\{\}\{\}\^/g, "^"); // Remove three empty braces followed by ^
+		result = result.replace(/\{\}\{\}\^/g, "^"); // Remove two empty braces followed by ^
+		result = result.replace(/\{\}\^/g, "^"); // Remove one empty brace followed by ^
+		
+		// Clean up other consecutive empty braces
 		result = result.replace(/\{\}\{\}(?!\^)/g, ""); // Remove pairs of empty braces not followed by ^
 		result = result.replace(/\{\}\{\}\{\}(?!\^)/g, ""); // Remove triplets of empty braces not followed by ^
 		result = result.replace(/\{\}\{\}\{\}\{\}(?!\^)/g, ""); // Remove quadruplets of empty braces not followed by ^
@@ -968,7 +978,12 @@ async function renderMathExpression(tex, displayMode = false, element = null) {
 	let cleanedTex = tex.trim();
 
 	// Clean up multiple consecutive empty braces that cause delimiter balance issues
-	// But be careful not to remove braces that are part of valid nuclear notation
+	// Handle the specific case where empty braces are followed by superscripts
+	cleanedTex = cleanedTex.replace(/\{\}\{\}\{\}\^/g, "^"); // Remove three empty braces followed by ^
+	cleanedTex = cleanedTex.replace(/\{\}\{\}\^/g, "^"); // Remove two empty braces followed by ^
+	cleanedTex = cleanedTex.replace(/\{\}\^/g, "^"); // Remove one empty brace followed by ^
+	
+	// Clean up other consecutive empty braces
 	cleanedTex = cleanedTex.replace(/\{\}\{\}(?!\^)/g, ""); // Remove pairs of empty braces not followed by ^
 	cleanedTex = cleanedTex.replace(/\{\}\{\}\{\}(?!\^)/g, ""); // Remove triplets of empty braces not followed by ^
 	cleanedTex = cleanedTex.replace(/\{\}\{\}\{\}\{\}(?!\^)/g, ""); // Remove quadruplets of empty braces not followed by ^
