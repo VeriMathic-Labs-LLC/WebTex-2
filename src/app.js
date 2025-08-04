@@ -569,7 +569,7 @@ class CustomLatexParser {
 		// Handle specific nuclear notation patterns in \text{} commands
 		// Pattern: \text{{}^{A}N} -> {}^{A}\text{N}
 		str = str.replace(/\\text\{\{\}\^\{([^}]+)\}([^}]*)\}/g, "{}^{$1}\\text{$2}");
-		
+
 		// Pattern: \text{{}^{A}_{Z}N} -> {}^{A}_{Z}\text{N}
 		str = str.replace(/\\text\{\{\}\^\{([^}]+)\}_\{([^}]+)\}([^}]*)\}/g, "{}^{$1}_{$2}\\text{$3}");
 
@@ -622,12 +622,12 @@ class CustomLatexParser {
 		const MALFORMED_NESTED_TEXT_PATTERN = new RegExp(
 			[
 				// Match \text{^{A}\text{N}}
-				String.raw`\\text\{`,           // Match literal \text{
-				String.raw`\\\^\{([^}]+)\}`,    // Match ^{A} (superscript), capture A
-				String.raw`\\text\{([^}]*)\}`,  // Match \text{N}, capture N
-				String.raw`\}`                  // Match closing }
-			].join(''),
-			'g'
+				String.raw`\\text\{`, // Match literal \text{
+				String.raw`\\\^\{([^}]+)\}`, // Match ^{A} (superscript), capture A
+				String.raw`\\text\{([^}]*)\}`, // Match \text{N}, capture N
+				String.raw`\}`, // Match closing }
+			].join(""),
+			"g",
 		);
 		str = str.replace(MALFORMED_NESTED_TEXT_PATTERN, "{}^{$1}\\text{$2}");
 
@@ -907,7 +907,8 @@ function hasUnbalancedDelimiters(str) {
 			const fullCommand = str.substring(i, commandEnd);
 
 			if (stack.length === 0 || !isLeftRightPair(stack[stack.length - 1], fullCommand)) {
-				console.log(`Unmatched delimiter: ${fullCommand}`);
+				// Warn in console when unmatched delimiter is detected, but avoid using console.log
+				console.warn(`Unmatched delimiter: ${fullCommand}`);
 				return true; // Unmatched \\right
 			}
 			stack.pop();
@@ -1008,148 +1009,152 @@ async function renderMathExpression(tex, displayMode = false, element = null) {
 		return { success: false, method: "unbalanced", element };
 	}
 
-			// Try KaTeX first with the original text
-		try {
-			// Preprocess with custom parser
-			let processedTex = cleanedTex;
-			if (customParser.canHandle(cleanedTex)) {
-				try {
-					processedTex = customParser.simplify(cleanedTex);
-				} catch (simplifyError) {
-					console.warn("Error in custom parser simplification:", simplifyError);
-					// Continue with original text if simplification fails
-				}
+	// Try KaTeX first with the original text
+	try {
+		// Preprocess with custom parser
+		let processedTex = cleanedTex;
+		if (customParser.canHandle(cleanedTex)) {
+			try {
+				processedTex = customParser.simplify(cleanedTex);
+			} catch (simplifyError) {
+				console.warn("Error in custom parser simplification:", simplifyError);
+				// Continue with original text if simplification fails
 			}
+		}
 
-			// Handle Unicode characters
-			processedTex = handleUnicodeInMath(processedTex);
+		// Handle Unicode characters
+		processedTex = handleUnicodeInMath(processedTex);
 
-			// Configure KaTeX options
-			const katexOptions = {
+		// Configure KaTeX options
+		const katexOptions = {
+			displayMode: isDisplayMath,
+			errorColor: "inherit",
+			strict: (errorCode) => {
+				// Handle specific error codes to reduce warnings
+				if (errorCode === "newLineInDisplayMode") {
+					// In display mode, newlines are ignored, so we can safely ignore this warning
+					return "ignore";
+				}
+				// For other errors, warn but continue
+				return "warn";
+			},
+			trust: (context) => {
+				// Allow common commands that need trust
+				const trustedCommands = [
+					"\\href",
+					"\\url",
+					"\\includegraphics",
+					"\\htmlId",
+					"\\htmlClass",
+					"\\htmlData",
+					"\\htmlStyle",
+					"\\class",
+					"\\id",
+					"\\data",
+					"\\style",
+				];
+				if (trustedCommands.includes(context.command)) {
+					return true;
+				}
+				// Allow specific protocols in URLs
+				if (["href", "url", "includegraphics"].includes(context.command)) {
+					const safeProtocols = ["http", "https", "data", "mailto", "ftp"];
+					return safeProtocols.some((proto) => context.url.startsWith(proto));
+				}
+				return false;
+			},
+			macros: {
+				"\\RR": "\\mathbb{R}",
+				"\\NN": "\\mathbb{N}",
+				"\\ZZ": "\\mathbb{Z}",
+				"\\QQ": "\\mathbb{Q}",
+				"\\CC": "\\mathbb{C}",
+				"\\half": "\\frac{1}{2}",
+				"\\quarter": "\\frac{1}{4}",
+				"\\third": "\\frac{1}{3}",
+				"\\twothirds": "\\frac{2}{3}",
+				"\\threequarters": "\\frac{3}{4}",
+				"\\to": "\\rightarrow",
+				"\\rac": "\\frac",
+				"\\qed": "\\quad \\blacksquare",
+				"\\abs": "\\left|#1\\right|",
+				"\\norm": "\\left\\|#1\\right\\|",
+				"\\set": "\\left\\{#1\\right\\}",
+				"\\paren": "\\left(#1\\right)",
+				"\\brack": "\\left[#1\\right]",
+				"\\eval": "\\left.#1\\right|_{#2}",
+			},
+			maxSize: 1000,
+			maxExpand: 1000,
+			maxCharacterCount: 10000,
+			throwOnError: true,
+		};
+
+		// Try rendering with KaTeX
+		const rendered = katex.renderToString(processedTex, katexOptions);
+		rendererState.katexSuccess++;
+
+		if (element) {
+			element.innerHTML = rendered;
+			element.classList.add("webtex-katex-rendered");
+		}
+
+		return { success: true, method: "katex", element };
+	} catch (katexError) {
+		console.warn("KaTeX rendering failed, falling back to custom parser:", katexError);
+		reportKaTeXError(tex, katexError);
+
+		// Check if this is an invalid command error
+		const isInvalidCommand =
+			katexError.message &&
+			/undefined control sequence|can't use function|unknown function|invalid\s*command/i.test(
+				katexError.message,
+			);
+
+		// Try custom parser as fallback
+		try {
+			const simplified = customParser.simplify(cleanedTex);
+			const processedSimplified = handleUnicodeInMath(simplified);
+
+			// Use KaTeX in non-strict mode for the fallback
+			const rendered = katex.renderToString(processedSimplified, {
 				displayMode: isDisplayMath,
+				throwOnError: false,
 				errorColor: "inherit",
-				strict: (errorCode) => {
-					// Handle specific error codes to reduce warnings
-					if (errorCode === "newLineInDisplayMode") {
-						// In display mode, newlines are ignored, so we can safely ignore this warning
-						return "ignore";
-					}
-					// For other errors, warn but continue
-					return "warn";
-				},
-				trust: (context) => {
-					// Allow common commands that need trust
-					const trustedCommands = [
-						"\\href",
-						"\\url",
-						"\\includegraphics",
-						"\\htmlId",
-						"\\htmlClass",
-						"\\htmlData",
-						"\\htmlStyle",
-						"\\class",
-						"\\id",
-						"\\data",
-						"\\style",
-					];
-					if (trustedCommands.includes(context.command)) {
-						return true;
-					}
-					// Allow specific protocols in URLs
-					if (["href", "url", "includegraphics"].includes(context.command)) {
-						const safeProtocols = ["http", "https", "data", "mailto", "ftp"];
-						return safeProtocols.some((proto) => context.url.startsWith(proto));
-					}
-					return false;
-				},
-				macros: {
-					"\\RR": "\\mathbb{R}",
-					"\\NN": "\\mathbb{N}",
-					"\\ZZ": "\\mathbb{Z}",
-					"\\QQ": "\\mathbb{Q}",
-					"\\CC": "\\mathbb{C}",
-					"\\half": "\\frac{1}{2}",
-					"\\quarter": "\\frac{1}{4}",
-					"\\third": "\\frac{1}{3}",
-					"\\twothirds": "\\frac{2}{3}",
-					"\\threequarters": "\\frac{3}{4}",
-					"\\to": "\\rightarrow",
-					"\\rac": "\\frac",
-					"\\qed": "\\quad \\blacksquare",
-					"\\abs": "\\left|#1\\right|",
-					"\\norm": "\\left\\|#1\\right\\|",
-					"\\set": "\\left\\{#1\\right\\}",
-					"\\paren": "\\left(#1\\right)",
-					"\\brack": "\\left[#1\\right]",
-					"\\eval": "\\left.#1\\right|_{#2}",
-				},
-				maxSize: 1000,
-				maxExpand: 1000,
-				maxCharacterCount: 10000,
-				throwOnError: true,
-			};
-
-			// Try rendering with KaTeX
-			const rendered = katex.renderToString(processedTex, katexOptions);
-			rendererState.katexSuccess++;
+				strict: false,
+				trust: true,
+			});
 
 			if (element) {
 				element.innerHTML = rendered;
-				element.classList.add("webtex-katex-rendered");
+				element.classList.add("webtex-custom-rendered");
 			}
 
-			return { success: true, method: "katex", element };
-		} catch (katexError) {
-			console.warn("KaTeX rendering failed, falling back to custom parser:", katexError);
-			reportKaTeXError(tex, katexError);
+			rendererState.customParserFallback++;
+			return { success: true, method: "custom", element };
+		} catch (customError) {
+			console.warn("Custom parser fallback failed:", customError);
 
-			// Check if this is an invalid command error
-			const isInvalidCommand = katexError.message && /undefined control sequence|can't use function|unknown function|invalid\s*command/i.test(katexError.message);
+			// Final fallback - show original text with error styling
+			if (element) {
+				const fallbackElement = customParser.renderFallback(tex, isDisplayMath);
+				element.innerHTML = "";
+				element.appendChild(fallbackElement);
+				element.classList.add("webtex-error-fallback");
 
-			// Try custom parser as fallback
-			try {
-				const simplified = customParser.simplify(cleanedTex);
-				const processedSimplified = handleUnicodeInMath(simplified);
-
-				// Use KaTeX in non-strict mode for the fallback
-				const rendered = katex.renderToString(processedSimplified, {
-					displayMode: isDisplayMath,
-					throwOnError: false,
-					errorColor: "inherit",
-					strict: false,
-					trust: true,
-				});
-
-				if (element) {
-					element.innerHTML = rendered;
-					element.classList.add("webtex-custom-rendered");
+				// Provide more specific error information
+				let errorMessage = "Rendering failed";
+				if (isInvalidCommand) {
+					errorMessage = "Invalid LaTeX command";
+				} else if (customError.message) {
+					errorMessage = customError.message;
 				}
-
-				rendererState.customParserFallback++;
-				return { success: true, method: "custom", element };
-			} catch (customError) {
-				console.warn("Custom parser fallback failed:", customError);
-
-				// Final fallback - show original text with error styling
-				if (element) {
-					const fallbackElement = customParser.renderFallback(tex, isDisplayMath);
-					element.innerHTML = "";
-					element.appendChild(fallbackElement);
-					element.classList.add("webtex-error-fallback");
-					
-					// Provide more specific error information
-					let errorMessage = "Rendering failed";
-					if (isInvalidCommand) {
-						errorMessage = "Invalid LaTeX command";
-					} else if (customError.message) {
-						errorMessage = customError.message;
-					}
-					element.title = errorMessage;
-				}
-
-				return { success: false, method: "error", element, error: customError };
+				element.title = errorMessage;
 			}
+
+			return { success: false, method: "error", element, error: customError };
 		}
+	}
 }
 
 /* -------------------------------------------------- */
