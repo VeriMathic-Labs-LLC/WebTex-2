@@ -1102,9 +1102,7 @@ async function renderMathExpression(tex, displayMode = false, element = null) {
 			reportKaTeXError(tex, katexError);
 
 			// Check if this is an invalid command error
-			const isInvalidCommand = katexError.message && (
-				/undefined control sequence|can't use function|unknown function|invalid\s*command/i.test(katexError.message)
-			);
+			const isInvalidCommand = katexError.message && /undefined control sequence|can't use function|unknown function|invalid\s*command/i.test(katexError.message);
 
 			// Try custom parser as fallback
 			try {
