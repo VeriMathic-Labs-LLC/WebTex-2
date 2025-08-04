@@ -706,6 +706,7 @@ class CustomLatexParser {
 
 		// Fix unmatched braces in expressions
 		str = this.fixUnmatchedBraces(str);
+		str = cleanupEmptyBraces(str);
 
 		return str;
 	}
@@ -738,9 +739,7 @@ class CustomLatexParser {
 			openCount--;
 		}
 
-		// Remove problematic empty brace sequences
-		result = cleanupEmptyBraces(result);
-
+		// Return result without cleanup - cleanup should be handled externally
 		return result;
 	}
 
@@ -1009,6 +1008,7 @@ async function renderMathExpression(tex, displayMode = false, element = null) {
 	// Fix unmatched braces before checking balance
 	if (customParser && typeof customParser.fixUnmatchedBraces === "function") {
 		cleanedTex = customParser.fixUnmatchedBraces(cleanedTex);
+		cleanedTex = cleanupEmptyBraces(cleanedTex);
 	}
 
 	// Check for unbalanced delimiters with more detailed reporting

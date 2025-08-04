@@ -13,6 +13,7 @@ function cleanupEmptyBraces(str) {
 }
 
 // Helper to fix unmatched braces similar to extension logic
+// Note: This function no longer calls cleanupEmptyBraces internally to avoid circular dependency
 function fixUnmatchedBraces(str) {
 	let result = str;
 	let openCount = 0;
@@ -36,8 +37,8 @@ function fixUnmatchedBraces(str) {
 		openCount--;
 	}
 
-	// Apply cleanup after fixing braces to maintain expected behavior
-	return cleanupEmptyBraces(result);
+	// Return result without cleanup - cleanup should be handled externally
+	return result;
 }
 
 function testSpecificIssues() {
@@ -71,6 +72,7 @@ function testSpecificIssues() {
 		// Final cleanup and brace fix
 		str = cleanupEmptyBraces(str);
 		str = fixUnmatchedBraces(str);
+		str = cleanupEmptyBraces(str); // Final cleanup after brace fixing
 
 		return str;
 	}
