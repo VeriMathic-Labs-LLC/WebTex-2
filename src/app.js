@@ -990,15 +990,28 @@ async function renderMathExpression(tex, displayMode = false, element = null) {
 		cleanedTex = cleanedTex.replace(/\\(?:newline|\\)\s*\n?/g, "\\\\");
 	}
 
+	// Pre-fix common malformed patterns before any processing
+	let prefixedTex = cleanedTex;
+
+	// Fix incomplete \text{} commands
+	prefixedTex = prefixedTex.replace(/\\text(?!\s*\{)/g, "\\text{}");
+	prefixedTex = prefixedTex.replace(/\\text$/g, "\\text{}");
+	prefixedTex = prefixedTex.replace(/\\text\s+(?!\{)/g, "\\text{} ");
+
+	// Fix malformed integrals with missing superscripts
+	prefixedTex = prefixedTex.replace(/\\int_\{([^}]+)\}\^$/g, "\\int_{$1}^{}");
+	prefixedTex = prefixedTex.replace(/\\int_\{([^}]+)\}\^\s/g, "\\int_{$1}^{} ");
+	prefixedTex = prefixedTex.replace(/\\int_\{([^}]+)\}\^(?!\{)/g, "\\int_{$1}^{}");
+
 	// Fix unmatched braces before checking balance
 	if (customParser && typeof customParser.fixUnmatchedBraces === "function") {
-		cleanedTex = customParser.fixUnmatchedBraces(cleanedTex);
-		cleanedTex = cleanupEmptyBraces(cleanedTex);
+		prefixedTex = customParser.fixUnmatchedBraces(prefixedTex);
+		prefixedTex = cleanupEmptyBraces(prefixedTex);
 	}
 
 	// Check for unbalanced delimiters with more detailed reporting
-	if (hasUnbalancedDelimiters(cleanedTex)) {
-		console.warn(`Unbalanced delimiters in: ${cleanedTex}`);
+	if (hasUnbalancedDelimiters(prefixedTex)) {
+		console.warn(`Unbalanced delimiters in: ${prefixedTex}`);
 		if (element) {
 			const fb = customParser.renderFallback(tex, isDisplayMath);
 			element.innerHTML = "";
@@ -1012,10 +1025,10 @@ async function renderMathExpression(tex, displayMode = false, element = null) {
 	// Try KaTeX first with the original text
 	try {
 		// Preprocess with custom parser
-		let processedTex = cleanedTex;
-		if (customParser.canHandle(cleanedTex)) {
+		let processedTex = prefixedTex;
+		if (customParser.canHandle(prefixedTex)) {
 			try {
-				processedTex = customParser.simplify(cleanedTex);
+				processedTex = customParser.simplify(prefixedTex);
 			} catch (simplifyError) {
 				console.warn("Error in custom parser simplification:", simplifyError);
 				// Continue with original text if simplification fails
