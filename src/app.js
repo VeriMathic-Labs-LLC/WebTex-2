@@ -739,7 +739,7 @@ class CustomLatexParser {
 			openCount--;
 		}
 
-		// Return result without cleanup - cleanup should be handled externally
+		// Return result without cleanup; cleanup (e.g., removing empty braces) is handled by cleanupEmptyBraces in processTypoFixes
 		return result;
 	}
 
