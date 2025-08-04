@@ -503,9 +503,17 @@ class CustomLatexParser {
 		});
 
 		// Fix missing braces around denominator like \frac{a}{b + c}d → wrap single token
+		// But be careful not to break expressions with nested braces or superscripts
 		str = str.replace(
-			/\\frac\{([^{}]+)\}([^{])/g,
-			(_m, num, following) => `\\frac{${num}}{${following}}`,
+			/\\frac\{([^{}]+)\}([^{}\s])/g,
+			(_m, num, following) => {
+				// Only fix if the following character is not part of a superscript or subscript
+				// and if the numerator doesn't end with a superscript/subscript
+				if (!/[\^_]/.test(num.slice(-1)) && !/[\^_]/.test(following)) {
+					return `\\frac{${num}}{${following}}`;
+				}
+				return _m; // Return original if it might break superscripts/subscripts
+			},
 		);
 
 		// Handle incomplete fractions at the end of expressions
@@ -523,6 +531,13 @@ class CustomLatexParser {
 
 		// Fix fractions with double braces
 		str = str.replace(/\\frac\{\{([^}]+)\}\}\{\{([^}]+)\}\}/g, "\\frac{$1}{$2}");
+
+		// Fix malformed fractions with superscripts in numerator
+		// Handle cases like \frac{\pi^{2}{6} -> \frac{\pi^{2}}{6}
+		str = str.replace(/\\frac\{([^}]*\^\{[^}]*\})\{([^}]*)\}/g, "\\frac{$1}{$2}");
+
+		// Fix fractions where the closing brace is missing after superscripts
+		str = str.replace(/\\frac\{([^}]*\^\{[^}]*\})\s*([^{}\s])/g, "\\frac{$1}{$2}");
 
 		return str;
 	}
@@ -687,6 +702,10 @@ class CustomLatexParser {
 
 		// Handle nested braces more carefully
 		result = result.replace(/\}(\s*)\}/g, "}$1"); // Remove duplicate consecutive braces
+
+		// Fix specific malformed fraction patterns
+		// Handle \frac{\pi^{2}{6} -> \frac{\pi^{2}}{6}
+		result = result.replace(/\\frac\{([^}]*\^\{[^}]*\})\{([^}]*)\}/g, "\\frac{$1}{$2}");
 
 		return result;
 	}
@@ -917,6 +936,10 @@ async function renderMathExpression(tex, displayMode = false, element = null) {
 
 	// Clean up the input
 	let cleanedTex = tex.trim();
+
+	// Fix specific malformed fraction patterns before processing
+	// Handle \frac{\pi^{2}{6} -> \frac{\pi^{2}}{6}
+	cleanedTex = cleanedTex.replace(/\\frac\{([^}]*\^\{[^}]*\})\{([^}]*)\}/g, "\\frac{$1}{$2}");
 
 	// Handle display mode delimiters
 	const isDisplayMath =
