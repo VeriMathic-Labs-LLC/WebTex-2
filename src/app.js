@@ -693,6 +693,23 @@ class CustomLatexParser {
 		// Fix missing braces in limits: \lim_{x o infty} -> \lim_{x \to \infty}
 		str = str.replace(/\\lim_\{([^}]*)\s+o\s+infty\}/g, "\\lim_{$1 \\to \\infty}");
 
+		// Fix incomplete \text{} commands
+		str = str.replace(/\\text(?![{\s])/g, "\\text{}");
+		str = str.replace(/\\text$/g, "\\text{}");
+		str = str.replace(/\\text\s+(?!\{)/g, "\\text{} ");
+		// Fix \text{ without closing brace
+		str = str.replace(/\\text\{(?![^}]*\})/g, "\\text{}");
+
+		// Fix malformed integrals with missing superscripts
+		str = str.replace(/\\int_\{([^}]+)\}\^$/g, "\\int_{$1}^{}");
+		str = str.replace(/\\int_\{([^}]+)\}\^\s/g, "\\int_{$1}^{} ");
+		str = str.replace(/\\int_\{([^}]+)\}\^(?!\{)/g, "\\int_{$1}^{}");
+		// Also handle \int_0^ style (without braces around subscript)
+		str = str.replace(/\\int_([^{_\s]+)\^$/g, "\\int_{$1}^{}");
+		str = str.replace(/\\int_([^{_\s]+)\^(?!\{)/g, "\\int_{$1}^{}");
+		// Fix \int_0^{ without closing brace
+		str = str.replace(/\\int_([^{_\s]+)\^\{(?![^}]*\})/g, "\\int_{$1}^{}");
+
 		// Auto-wrap bare ^ and _ arguments with braces
 		str = str.replace(/(\^|_)(?![{\\])\s*([A-Za-z0-9+-])/g, "$1{$2}");
 
@@ -993,15 +1010,35 @@ async function renderMathExpression(tex, displayMode = false, element = null) {
 	// Pre-fix common malformed patterns before any processing
 	let prefixedTex = cleanedTex;
 
+	// Debug: log expressions that match our problematic patterns
+	if (prefixedTex.includes("\\text") && !prefixedTex.includes("\\text{")) {
+		console.log("[WebTeX Debug] Fixing incomplete \\text command in:", prefixedTex);
+	}
+	if (prefixedTex.match(/\\int_\{[^}]+\}\^(?!\{)/)) {
+		console.log("[WebTeX Debug] Fixing malformed integral in:", prefixedTex);
+	}
+
 	// Fix incomplete \text{} commands
-	prefixedTex = prefixedTex.replace(/\\text(?!\s*\{)/g, "\\text{}");
+	prefixedTex = prefixedTex.replace(/\\text(?![{\s])/g, "\\text{}");
 	prefixedTex = prefixedTex.replace(/\\text$/g, "\\text{}");
 	prefixedTex = prefixedTex.replace(/\\text\s+(?!\{)/g, "\\text{} ");
+	// Fix \text{ without closing brace
+	prefixedTex = prefixedTex.replace(/\\text\{(?![^}]*\})/g, "\\text{}");
 
 	// Fix malformed integrals with missing superscripts
 	prefixedTex = prefixedTex.replace(/\\int_\{([^}]+)\}\^$/g, "\\int_{$1}^{}");
 	prefixedTex = prefixedTex.replace(/\\int_\{([^}]+)\}\^\s/g, "\\int_{$1}^{} ");
 	prefixedTex = prefixedTex.replace(/\\int_\{([^}]+)\}\^(?!\{)/g, "\\int_{$1}^{}");
+	// Also handle \int_0^ style (without braces around subscript)
+	prefixedTex = prefixedTex.replace(/\\int_([^{_\s]+)\^$/g, "\\int_{$1}^{}");
+	prefixedTex = prefixedTex.replace(/\\int_([^{_\s]+)\^(?!\{)/g, "\\int_{$1}^{}");
+	// Fix \int_0^{ without closing brace
+	prefixedTex = prefixedTex.replace(/\\int_([^{_\s]+)\^\{(?![^}]*\})/g, "\\int_{$1}^{}");
+
+	// Debug: log the result after fixes
+	if (cleanedTex !== prefixedTex) {
+		console.log("[WebTeX Debug] Fixed expression from:", cleanedTex, "to:", prefixedTex);
+	}
 
 	// Fix unmatched braces before checking balance
 	if (customParser && typeof customParser.fixUnmatchedBraces === "function") {
