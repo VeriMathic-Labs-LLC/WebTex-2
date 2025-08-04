@@ -1003,7 +1003,7 @@ async function renderMathExpression(tex, displayMode = false, element = null) {
 	}
 
 	// Fix unmatched braces before checking balance
-	if (typeof customParser.fixUnmatchedBraces === "function") {
+	if (customParser && typeof customParser.fixUnmatchedBraces === "function") {
 		cleanedTex = customParser.fixUnmatchedBraces(cleanedTex);
 	}
 
