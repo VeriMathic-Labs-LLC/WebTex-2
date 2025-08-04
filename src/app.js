@@ -1003,7 +1003,9 @@ async function renderMathExpression(tex, displayMode = false, element = null) {
 	}
 
 	// Fix unmatched braces before checking balance
-	cleanedTex = customParser.fixUnmatchedBraces(cleanedTex);
+	if (typeof customParser.fixUnmatchedBraces === "function") {
+		cleanedTex = customParser.fixUnmatchedBraces(cleanedTex);
+	}
 
 	// Check for unbalanced delimiters with more detailed reporting
 	if (hasUnbalancedDelimiters(cleanedTex)) {
