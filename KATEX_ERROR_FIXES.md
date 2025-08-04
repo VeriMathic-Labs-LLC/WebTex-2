@@ -57,7 +57,7 @@ return `\\text{${inner}}`;
 - Centralizes the cleanup logic for better maintainability
 
 ### 4. Improved error handling in `renderMathExpression` (lines 946-1163)
-- Enhanced detection of invalid command errors using regex pattern: `/undefined control sequence|can't use function|unknown function|invalid\s*command/i`
+- Enhanced detection of invalid command errors using regex pattern: `/undefined control sequence|can't use function|unknown function|invalid\\s*command/i`
 - More robust error detection that catches various invalid command types
 - Enhanced fallback logic
 - Better error reporting
@@ -93,6 +93,7 @@ After these fixes:
 - Improved readability and maintainability
 - Made the code more modular and testable
 - Fixed regex pattern escaping for better readability
+- Cleaned up code formatting by removing unnecessary blank lines
 
 ## Files Modified
 

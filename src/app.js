@@ -317,7 +317,7 @@ function cleanupEmptyBraces(str) {
 	str = str.replace(/\{\}\{\}\{\}(?!\^)/g, "");
 	str = str.replace(/\{\}\{\}\{\}\{\}(?!\^)/g, "");
 	str = str.replace(/\{\}\{\}/g, "");
-	str = str.replace(/{}(?!\^)/g, ""); // Remove single empty braces not followed by ^
+	str = str.replace(/\{\}(?!\^)/g, ""); // Remove single empty braces not followed by ^
 	return str;
 }
 
@@ -559,8 +559,6 @@ class CustomLatexParser {
 
 		return str;
 	}
-
-
 
 	processNuclearNotation(str) {
 		// Enhanced nuclear notation processing with better error handling
@@ -1091,7 +1089,7 @@ async function renderMathExpression(tex, displayMode = false, element = null) {
 			reportKaTeXError(tex, katexError);
 
 			// Check if this is an invalid command error
-			const isInvalidCommand = katexError.message && /undefined control sequence|can't use function|unknown function|invalid\s*command/i.test(katexError.message);
+			const isInvalidCommand = katexError.message && /undefined control sequence|can't use function|unknown function|invalid\\s*command/i.test(katexError.message);
 
 			// Try custom parser as fallback
 			try {
