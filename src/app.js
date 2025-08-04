@@ -559,7 +559,11 @@ class CustomLatexParser {
 			(match, empty, sup, sub, rest) => {
 				if (sup || sub) {
 					// This is nuclear notation inside \text{}, extract it
-					return `${empty || ""}${sup || ""}${sub || ""}\\text{${rest.trim()}}`;
+					// Create proper nuclear notation format
+					let notation = "";
+					if (sup) notation += sup;
+					if (sub) notation += sub;
+					return `{${notation}}\\text{${rest.trim()}}`;
 				}
 				return match;
 			},
@@ -611,6 +615,18 @@ class CustomLatexParser {
 
 		// Handle cases like {}^{A}_{Z+1}\text{N'} + e^{-} + \overline{\nu}
 		str = str.replace(/\{\}\^\{([^}]+)\}_\{([^}]+)\}\\text\{([^}]+)\}/g, "{}^{$1}_{$2}\\text{$3}");
+
+		// Clean up multiple consecutive empty braces that cause delimiter balance issues
+		// But be careful not to remove braces that are part of valid nuclear notation
+		str = str.replace(/\{\}\{\}(?!\^)/g, ""); // Remove pairs of empty braces not followed by ^
+		str = str.replace(/\{\}\{\}\{\}(?!\^)/g, ""); // Remove triplets of empty braces not followed by ^
+		str = str.replace(/\{\}\{\}\{\}\{\}(?!\^)/g, ""); // Remove quadruplets of empty braces not followed by ^
+		
+		// Fix nuclear notation format: {^{A}} -> {}^{A}
+		str = str.replace(/\{(\^\{[^}]+\})\}/g, "{$1}");
+		
+		// Clean up remaining empty brace pairs that might be left
+		str = str.replace(/\{\}\{\}/g, "");
 
 		return str;
 	}
@@ -710,6 +726,12 @@ class CustomLatexParser {
 
 		// Handle nested braces more carefully
 		result = result.replace(/\}(\s*)\}/g, "}$1"); // Remove duplicate consecutive braces
+
+		// Clean up multiple consecutive empty braces that cause delimiter balance issues
+		// But be careful not to remove braces that are part of valid nuclear notation
+		result = result.replace(/\{\}\{\}(?!\^)/g, ""); // Remove pairs of empty braces not followed by ^
+		result = result.replace(/\{\}\{\}\{\}(?!\^)/g, ""); // Remove triplets of empty braces not followed by ^
+		result = result.replace(/\{\}\{\}\{\}\{\}(?!\^)/g, ""); // Remove quadruplets of empty braces not followed by ^
 
 		// Fix specific malformed fraction patterns
 		// Handle \frac{\pi^{2}{6} -> \frac{\pi^{2}}{6}
@@ -944,6 +966,12 @@ async function renderMathExpression(tex, displayMode = false, element = null) {
 
 	// Clean up the input
 	let cleanedTex = tex.trim();
+
+	// Clean up multiple consecutive empty braces that cause delimiter balance issues
+	// But be careful not to remove braces that are part of valid nuclear notation
+	cleanedTex = cleanedTex.replace(/\{\}\{\}(?!\^)/g, ""); // Remove pairs of empty braces not followed by ^
+	cleanedTex = cleanedTex.replace(/\{\}\{\}\{\}(?!\^)/g, ""); // Remove triplets of empty braces not followed by ^
+	cleanedTex = cleanedTex.replace(/\{\}\{\}\{\}\{\}(?!\^)/g, ""); // Remove quadruplets of empty braces not followed by ^
 
 	// Fix specific malformed fraction patterns before processing
 	// Handle \frac{\pi^{2}{6} -> \frac{\pi^{2}}{6}
