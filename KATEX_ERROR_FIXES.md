@@ -44,13 +44,20 @@ return `\\text{${inner}}`;
 ```
 
 ### 2. Enhanced `processNuclearNotation` method (lines 562-634)
-- Added early cleanup of empty braces
+- Added early cleanup of empty braces using new helper method
 - Improved pattern matching for nuclear notation
-- Added final cleanup step
+- Added final cleanup step using helper method
 - Better handling of specific patterns
+- Removed duplicate regex patterns
 
-### 3. Improved error handling in `renderMathExpression` (lines 946-1163)
-- Added detection of invalid command errors
+### 3. Added `cleanupEmptyBraces` helper method
+- Extracted common empty brace cleanup logic into reusable method
+- Eliminates code duplication across multiple methods
+- Centralizes the cleanup logic for better maintainability
+
+### 4. Improved error handling in `renderMathExpression` (lines 946-1163)
+- Enhanced detection of invalid command errors using regex pattern
+- More robust error detection that catches various invalid command types
 - Enhanced fallback logic
 - Better error reporting
 
@@ -67,6 +74,23 @@ After these fixes:
 2. Invalid commands should show graceful fallbacks instead of crashing
 3. `\mathrm` commands should work properly when not nested in `\text{}`
 4. Delimiter balance issues should be resolved
+
+## Code Quality Improvements
+
+### 1. Eliminated Code Duplication
+- Extracted `cleanupEmptyBraces` helper method to remove duplicate regex patterns
+- Centralized empty brace cleanup logic for better maintainability
+- Reduced code duplication across `processNuclearNotation`, `processTypoFixes`, and `renderMathExpression`
+
+### 2. Improved Error Detection
+- Replaced overly specific string matching with robust regex pattern
+- Enhanced error detection to catch various types of invalid commands
+- More flexible error handling that adapts to different KaTeX error messages
+
+### 3. Better Code Organization
+- Separated concerns by extracting helper methods
+- Improved readability and maintainability
+- Made the code more modular and testable
 
 ## Files Modified
 
