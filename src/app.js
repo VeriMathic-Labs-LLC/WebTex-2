@@ -347,11 +347,18 @@ function fixIncompleteCommands(str) {
     str = str.replace(/\\int_\{([^}]+)\}\^(?!\s*\{)/g, "\\int_{$1}^{}");
 
     // Also handle variants without braces around subscript, e.g. \int_0^
-    str = str.replace(/\\int_([^\{_\s]+)\^\s*$/g, "\\int_{$1}^{}");
-    str = str.replace(/\\int_([^\{_\s]+)\^(?!\s*\{)/g, "\\int_{$1}^{}");
+    // Pattern allows either a LaTeX command (e.g., \\alpha) or bare token
+    const SUBSCRIPT_TOKEN = "(?:\\\\[a-zA-Z]+|[^_\\\\\s{}]+)";
+    const reSubNoBraceEnd = new RegExp(`\\\\int_${SUBSCRIPT_TOKEN}\\^\\s*$`, "g");
+    const reSubNoBraceToken = new RegExp(`\\\\int_${SUBSCRIPT_TOKEN}\\^(?!\\s*\\{)`, "g");
+    str = str.replace(reSubNoBraceEnd, (_m) => _m.replace(/\\\\int_/, "\\int_{").replace(/\\\^/, "}^{}"));
+    str = str.replace(reSubNoBraceToken, (_m) => _m.replace(/\\\\int_/, "\\int_{").replace(/\\\^/, "}^{}"));
 
     // \int_0^{  (missing closing brace on superscript)
-    str = str.replace(/\\int_([^\{_\s]+)\^\{[^}]*$/g, "\\int_{$1}^{}");
+    const reSubMissingBrace = new RegExp(`\\\\int_${SUBSCRIPT_TOKEN}\\^\\{[^}]*$`, "g");
+    str = str.replace(reSubMissingBrace, (_m) => {
+        return _m.replace(/\\\\int_/, "\\int_{").replace(/\\^\\{[^}]*$/, "}^{}");
+    });
 
     return str;
 }
