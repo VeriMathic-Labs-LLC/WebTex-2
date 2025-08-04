@@ -297,7 +297,7 @@ window.webtexErrors = [];
 function reportKaTeXError(tex, error) {
 	const message = error?.message || (typeof error === "string" ? error : "Unknown KaTeX error");
 	window.webtexErrors.push({ tex, message, time: Date.now() });
-	console.warn("[WebTeX] KaTeX parse error:", message, "in", tex);
+	log(LOG_LEVEL.WARN, "[WebTeX] KaTeX parse error:", message, "in", tex);
 
 	// Dispatch a custom event for external listeners/devtools panels
 	try {
@@ -938,10 +938,10 @@ async function renderMathExpression(tex, displayMode = false, element = null) {
 
 	// Debug: log expressions that match our problematic patterns
 	if (prefixedTex.includes("\\text") && !prefixedTex.includes("\\text{")) {
-		console.log("[WebTeX Debug] Fixing incomplete \\text command in:", prefixedTex);
+		log(LOG_LEVEL.INFO, "[WebTeX Debug] Fixing incomplete \\text command in:", prefixedTex);
 	}
 	if (prefixedTex.match(/\\int_\{[^}]+\}\^(?!\{)/)) {
-		console.log("[WebTeX Debug] Fixing malformed integral in:", prefixedTex);
+		log(LOG_LEVEL.INFO, "[WebTeX Debug] Fixing malformed integral in:", prefixedTex);
 	}
 
 	// Apply shared fixes for incomplete commands and malformed integrals
@@ -949,7 +949,7 @@ async function renderMathExpression(tex, displayMode = false, element = null) {
 
 	// Debug: log the result after fixes
 	if (cleanedTex !== prefixedTex) {
-		console.log("[WebTeX Debug] Fixed expression from:", cleanedTex, "to:", prefixedTex);
+		log(LOG_LEVEL.INFO, "[WebTeX Debug] Fixed expression from:", cleanedTex, "to:", prefixedTex);
 	}
 
 	// Fix unmatched braces before checking balance
@@ -969,7 +969,7 @@ async function renderMathExpression(tex, displayMode = false, element = null) {
 			try {
 				processedTex = customParser.simplify(prefixedTex);
 			} catch (simplifyError) {
-				console.warn("Error in custom parser simplification:", simplifyError);
+				log(LOG_LEVEL.WARN, "Error in custom parser simplification:", simplifyError);
 				// Continue with original text if simplification fails
 			}
 		}
@@ -1062,7 +1062,11 @@ async function renderMathExpression(tex, displayMode = false, element = null) {
 
 		// Only log non-command-related errors to reduce console noise
 		if (!isInvalidCommand) {
-			console.warn("KaTeX rendering failed, falling back to custom parser:", katexError);
+			log(
+				LOG_LEVEL.WARN,
+				"[WebTeX] KaTeX rendering failed, falling back to custom parser:",
+				katexError,
+			);
 			reportKaTeXError(tex, katexError);
 		}
 
@@ -1087,7 +1091,10 @@ async function renderMathExpression(tex, displayMode = false, element = null) {
 				const commandMatch = katexError.message.match(/Undefined control sequence: \\?([a-zA-Z]+)/);
 				if (commandMatch) {
 					const command = commandMatch[1];
-					console.warn(`[WebTeX] Undefined command: \\${command}. Using fallback rendering.`);
+					// Only log the warning in development
+					if (process.env.NODE_ENV !== "production") {
+						log(LOG_LEVEL.DEBUG, `Undefined command: \\${command}. Using fallback rendering.`);
+					}
 
 					// Add the undefined command to macros to prevent further errors
 					fallbackKatexOptions.macros[`\\${command}`] = `\\text{\\${command}}`;
@@ -1132,7 +1139,7 @@ async function renderMathExpression(tex, displayMode = false, element = null) {
 			rendererState.customParserFallback++;
 			return { success: true, method: "katex-fallback", element };
 		} catch (customError) {
-			console.warn("Custom parser fallback failed:", customError);
+			log(LOG_LEVEL.WARN, "Custom parser fallback failed:", customError);
 
 			// Final fallback - show original text with error styling
 			if (element) {

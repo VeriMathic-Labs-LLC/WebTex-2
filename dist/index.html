@@ -1,0 +1,106 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>WebTeX Test Page</title>
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.22/dist/katex.min.css">
+    <style>
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+            line-height: 1.6;
+            max-width: 800px;
+            margin: 0 auto;
+            padding: 20px;
+            color: #333;
+        }
+        h1, h2 {
+            color: #2c3e50;
+            margin-top: 2em;
+        }
+        .example {
+            background-color: #f8f9fa;
+            border-left: 4px solid #3498db;
+            padding: 15px;
+            margin: 20px 0;
+            border-radius: 0 4px 4px 0;
+        }
+        .math {
+            font-size: 1.1em;
+            margin: 10px 0;
+            padding: 10px;
+            background-color: #f1f3f5;
+            border-radius: 4px;
+            overflow-x: auto;
+        }
+        .success {
+            color: #27ae60;
+        }
+        .error {
+            color: #e74c3c;
+        }
+    </style>
+</head>
+<body>
+    <h1>WebTeX Test Page</h1>
+    
+    <div class="example">
+        <h2>Valid LaTeX Expressions</h2>
+        
+        <div class="test">
+            <h3>Inline Math</h3>
+            <p>This is an inline equation: $E = mc^2$</p>
+            <p>Another example: $\sum_{i=1}^n i = \frac{n(n+1)}{2}$</p>
+        </div>
+        
+        <div class="test">
+            <h3>Display Math</h3>
+            <p>This is a display equation:</p>
+            <p>$$\int_{-\infty}^\infty e^{-x^2} \, dx = \sqrt{\pi}$$</p>
+        </div>
+    </div>
+    
+    <div class="example">
+        <h2>Expressions with Undefined Commands</h2>
+        <p>These expressions contain undefined commands and should fall back gracefully:</p>
+        
+        <div class="test">
+            <h3>Single Undefined Command</h3>
+            <p>This contains an undefined command: $\invalidcommand$</p>
+            <p>This contains a defined command followed by an undefined one: $\sin(x) + \invalidcommand$</p>
+        </div>
+        
+        <div class="test">
+            <h3>Undefined Command with Arguments</h3>
+            <p>Undefined command with argument: $\invalidcommand{arg}$</p>
+        </div>
+    </div>
+    
+    <div class="example">
+        <h2>Malformed Expressions</h2>
+        <p>These expressions are malformed but should still render something:</p>
+        
+        <div class="test">
+            <h3>Unbalanced Braces</h3>
+            <p>Missing closing brace: $\frac{1}{2$</p>
+            <p>Extra closing brace: $x^2}$</p>
+        </div>
+        
+        <div class="test">
+            <h3>Incomplete Commands</h3>
+            <p>Incomplete \text command: $a + \text$</p>
+            <p>Malformed integral: $\int_0^{$</p>
+        </div>
+    </div>
+
+    <!-- Load WebTeX script -->
+    <script src="app.js"></script>
+    
+    <script>
+        // Log any errors from WebTeX
+        window.addEventListener('error', function(event) {
+            console.error('Global error:', event.error || event.message);
+        });
+    </script>
+</body>
+</html>
