@@ -321,6 +321,49 @@ function cleanupEmptyBraces(str) {
 	return str;
 }
 
+// --------------------------------------------------
+// NEW SHARED HELPER: fixIncompleteCommands
+// Centralises fixes for incomplete \text{} commands and malformed integral
+// limits that were previously duplicated in multiple locations.
+function fixIncompleteCommands(str) {
+    // --- Incomplete \text{}
+    // Replace standalone "\\text" at string end or followed by whitespace
+    str = str.replace(/\\text(?=$|\s)/g, "\\text{}");
+
+    // Replace "\\text" not followed by an opening brace
+    str = str.replace(/\\text(?!\s*\{)/g, "\\text{}");
+
+    // Replace "\\text{" that has no closing brace until end-of-string
+    str = str.replace(/\\text\{[^}]*$/g, "\\text{}");
+
+    // --- Malformed integrals (missing superscripts)
+    // \int_{<sub>}^<nothing>
+    str = str.replace(/\\int_\{([^}]+)\}\^\s*$/g, "\\int_{$1}^{}");
+
+    // \int_{<sub>}^  <whitespace>
+    str = str.replace(/\\int_\{([^}]+)\}\^\s+/g, "\\int_{$1}^{} ");
+
+    // \int_{<sub>}^<token>   (token not wrapped in braces)
+    str = str.replace(/\\int_\{([^}]+)\}\^(?!\s*\{)/g, "\\int_{$1}^{}");
+
+    // Also handle variants without braces around subscript, e.g. \int_0^
+    // Pattern allows either a LaTeX command (e.g., \\alpha) or bare token
+    const SUBSCRIPT_TOKEN = "(?:\\\\[a-zA-Z]+|[^_\\\\\s{}]+)";
+    const reSubNoBraceEnd = new RegExp(`\\\\int_${SUBSCRIPT_TOKEN}\\^\\s*$`, "g");
+    const reSubNoBraceToken = new RegExp(`\\\\int_${SUBSCRIPT_TOKEN}\\^(?!\\s*\\{)`, "g");
+    str = str.replace(reSubNoBraceEnd, (_m) => _m.replace(/\\int_/, "\\int_{").replace(/\^/, "}^{}"));
+    str = str.replace(reSubNoBraceToken, (_m) => _m.replace(/\\int_/, "\\int_{").replace(/\^/, "}^{}"));
+
+    // \int_0^{  (missing closing brace on superscript)
+    const reSubMissingBrace = new RegExp(`\\\\int_${SUBSCRIPT_TOKEN}\\^\\{[^}]*$`, "g");
+    str = str.replace(reSubMissingBrace, (_m) => {
+        return _m.replace(/\\int_/, "\\int_{").replace(/\^\{[^}]*$/, "}^{}");
+    });
+
+    return str;
+}
+// --------------------------------------------------
+
 class CustomLatexParser {
 	constructor() {
 		this.supportedEnvironments = [
@@ -669,26 +712,10 @@ class CustomLatexParser {
 		);
 		str = str.replace(MALFORMED_NESTED_TEXT_PATTERN, "{}^{$1}\\text{$2}");
 
-		// Additional pattern to handle cases with subscripts like: \text{^{A}\text{N'}} -> {}^{A}\text{N'}
-		// This handles the specific case mentioned in the error
-		const MALFORMED_NESTED_TEXT_WITH_SUBSCRIPT_PATTERN = new RegExp(
-			[
-				// Match \text{^{A}\text{N'}}
-				String.raw`\\text\{`, // Match literal \text{
-				String.raw`\\\^\{([^}]+)\}`, // Match ^{A} (superscript), capture A
-				String.raw`\\text\{([^}]*)\}`, // Match \text{N'}, capture N'
-				String.raw`\}`, // Match closing }
-			].join(""),
-			"g",
-		);
-		str = str.replace(MALFORMED_NESTED_TEXT_WITH_SUBSCRIPT_PATTERN, "{}^{$1}\\text{$2}");
 
-		// Handle the complete nuclear decay pattern: \text{^{A}\text{N}} \rightarrow ^{A}_{Z+1}\text{N'} + e^{-} + \overline{\nu}
-		// This is a more comprehensive pattern that handles the full expression
-		str = str.replace(
-			/\\text\{\^\{([^}]+)\}\\text\{([^}]*)\}\}\s*\\rightarrow\s*\^\{([^}]+)\}_\{([^}]+)\}\\text\{([^}]*)\}\s*\+\s*e\^\{-\}\s*\+\s*\\overline\{\\nu\}/g,
-			"{}^{$1}\\text{$2} \\rightarrow {}^{$3}_{$4}\\text{$5} + e^{-} + \\overline{\\nu}",
-		);
+		// Handle nested form without escaped caret: \text{^{A}\text{N}} -> {}^{A}\text{N}
+		str = str.replace(/\\text\{\^\{([^}]+)\}\\text\{([^}]+)\}\}/g, "{}^{$1}\\text{$2}");
+
 
 		// Final cleanup using the helper method
 		str = cleanupEmptyBraces(str);
@@ -752,24 +779,7 @@ class CustomLatexParser {
 		// Fix missing braces in limits: \lim_{x o infty} -> \lim_{x \to \infty}
 		str = str.replace(/\\lim_\{([^}]*)\s+o\s+infty\}/g, "\\lim_{$1 \\to \\infty}");
 
-		// Fix malformed integrals with missing superscripts: \int_{0}^ -> \int_{0}^{}
-		str = str.replace(/\\int_\{([^}]+)\}\^/g, "\\int_{$1}^{}");
 
-		// Fix integrals with missing superscripts at the end: \int_{0}^$ -> \int_{0}^{}
-		str = str.replace(/\\int_\{([^}]+)\}\^$/g, "\\int_{$1}^{}");
-
-		// Fix integrals with missing superscripts followed by whitespace: \int_{0}^ -> \int_{0}^{}
-		str = str.replace(/\\int_\{([^}]+)\}\^\s/g, "\\int_{$1}^{} ");
-
-		// Fix incomplete \text{} commands: a + \text -> a + \text{}
-		// This handles cases where \text is not followed by an opening brace
-		str = str.replace(/\\text(?!\s*\{)/g, "\\text{}");
-
-		// Additional fix for \text at the end of input
-		str = str.replace(/\\text$/g, "\\text{}");
-
-		// Fix \text followed by whitespace but no brace
-		str = str.replace(/\\text\s+(?!\{)/g, "\\text{} ");
 
 		// Auto-wrap bare ^ and _ arguments with braces
 		str = str.replace(/(\^|_)(?![{\\])\s*([A-Za-z0-9+-])/g, "$1{$2}");
@@ -859,7 +869,7 @@ class CustomLatexParser {
 
 const customParser = new CustomLatexParser();
 
-// -------------------------------------------------- */
+/* -------------------------------------------------- */
 // Enhanced delimiter balance check with LaTeX-specific handling
 function hasUnbalancedDelimiters(str) {
 	// Skip empty or very short strings
@@ -1068,15 +1078,34 @@ async function renderMathExpression(tex, displayMode = false, element = null) {
 		cleanedTex = cleanedTex.replace(/\\(?:newline|\\)\s*\n?/g, "\\\\");
 	}
 
+	// Pre-fix common malformed patterns before any processing
+	let prefixedTex = cleanedTex;
+
+	// Debug: log expressions that match our problematic patterns
+	if (prefixedTex.includes("\\text") && !prefixedTex.includes("\\text{")) {
+		console.log("[WebTeX Debug] Fixing incomplete \\text command in:", prefixedTex);
+	}
+	if (prefixedTex.match(/\\int_\{[^}]+\}\^(?!\{)/)) {
+		console.log("[WebTeX Debug] Fixing malformed integral in:", prefixedTex);
+	}
+
+	// Apply shared fixes for incomplete commands and malformed integrals
+	prefixedTex = fixIncompleteCommands(prefixedTex);
+
+	// Debug: log the result after fixes
+	if (cleanedTex !== prefixedTex) {
+		console.log("[WebTeX Debug] Fixed expression from:", cleanedTex, "to:", prefixedTex);
+	}
+
 	// Fix unmatched braces before checking balance
 	if (customParser && typeof customParser.fixUnmatchedBraces === "function") {
-		cleanedTex = customParser.fixUnmatchedBraces(cleanedTex);
-		cleanedTex = cleanupEmptyBraces(cleanedTex);
+		prefixedTex = customParser.fixUnmatchedBraces(prefixedTex);
+		prefixedTex = cleanupEmptyBraces(prefixedTex);
 	}
 
 	// Check for unbalanced delimiters with more detailed reporting
-	if (hasUnbalancedDelimiters(cleanedTex)) {
-		console.warn(`Unbalanced delimiters in: ${cleanedTex}`);
+	if (hasUnbalancedDelimiters(prefixedTex)) {
+		console.warn(`Unbalanced delimiters in: ${prefixedTex}`);
 		if (element) {
 			const fb = customParser.renderFallback(tex, isDisplayMath);
 			element.innerHTML = "";
@@ -1090,10 +1119,10 @@ async function renderMathExpression(tex, displayMode = false, element = null) {
 	// Try KaTeX first with the original text
 	try {
 		// Preprocess with custom parser
-		let processedTex = cleanedTex;
-		if (customParser.canHandle(cleanedTex)) {
+		let processedTex = prefixedTex;
+		if (customParser.canHandle(prefixedTex)) {
 			try {
-				processedTex = customParser.simplify(cleanedTex);
+				processedTex = customParser.simplify(prefixedTex);
 			} catch (simplifyError) {
 				console.warn("Error in custom parser simplification:", simplifyError);
 				// Continue with original text if simplification fails
