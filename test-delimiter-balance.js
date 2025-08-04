@@ -29,13 +29,13 @@ function testDelimiterBalance() {
 			// Check for LaTeX commands
 			if (char === "\\") {
 				// Look for \left or \right commands
-				// Corrected regex patterns to accurately match LaTeX \left... and \right... delimiters
+				// Using proper regex patterns with non-capturing groups for LaTeX delimiters
 				const leftMatch = str
 					.slice(i)
-					.match(/^\\left(?:\(|\[|\\\{|\\.|\||\\\||\\lfloor|\\lceil|\\langle)/);
+					.match(/^\\left(\(|\[|\\\{|\.|\||\\\||\\lfloor|\\lceil|\\langle)/);
 				const rightMatch = str
 					.slice(i)
-					.match(/^\\right(?:\)|\]|\\\}|\\.|\||\\\||\\rfloor|\\rceil|\\rangle)/);
+					.match(/^\\right(\)|\]|\\\}|\.|\||\\\||\\rfloor|\\rceil|\\rangle)/);
 
 				if (leftMatch) {
 					const leftCmd = leftMatch[0];
@@ -50,7 +50,8 @@ function testDelimiterBalance() {
 					if (stack.length > 0 && stack[stack.length - 1] === rightCmd) {
 						stack.pop();
 					} else {
-						return true; // Unmatched right delimiter
+						// Unmatched \right command
+						return true;
 					}
 					i += rightCmd.length;
 					continue;
@@ -61,17 +62,19 @@ function testDelimiterBalance() {
 			if (pairs[char]) {
 				stack.push(pairs[char]);
 			} else if (Object.values(pairs).includes(char)) {
-				if (stack.length > 0 && stack[stack.length - 1] === char) {
-					stack.pop();
-				} else {
-					return true; // Unmatched right delimiter
+				// Check if it's a closing delimiter
+				const expectedClosing = stack.pop();
+				if (expectedClosing !== char) {
+					// Mismatched delimiter
+					return true;
 				}
 			}
 
 			i++;
 		}
 
-		return stack.length > 0; // Unmatched left delimiters
+		// Check if any unclosed delimiters remain
+		return stack.length > 0;
 	}
 
 	// Simulate the complete processing pipeline
