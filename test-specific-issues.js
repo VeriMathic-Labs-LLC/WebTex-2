@@ -1,18 +1,45 @@
 // Test script to verify that the specific problematic expressions are fixed
 
-function testSpecificIssues() {
-	// Remove sequences of empty braces that cause delimiter balance issues
-	function cleanupEmptyBraces(str) {
-		str = str.replace(/\{\}\{\}\{\}\^/g, "^");
-		str = str.replace(/\{\}\{\}\^/g, "^");
-		str = str.replace(/\{\}\^/g, "^");
-		str = str.replace(/\{\}\{\}(?!\^)/g, "");
-		str = str.replace(/\{\}\{\}\{\}(?!\^)/g, "");
-		str = str.replace(/\{\}\{\}\{\}\{\}(?!\^)/g, "");
-		str = str.replace(/\{\}\{\}/g, "");
-		return str;
+// Remove sequences of empty braces that cause delimiter balance issues
+function cleanupEmptyBraces(str) {
+	str = str.replace(/\{\}\{\}\{\}\^/g, "^");
+	str = str.replace(/\{\}\{\}\^/g, "^");
+	str = str.replace(/\{\}\^/g, "^");
+	str = str.replace(/\{\}\{\}(?!\^)/g, "");
+	str = str.replace(/\{\}\{\}\{\}(?!\^)/g, "");
+	str = str.replace(/\{\}\{\}\{\}\{\}(?!\^)/g, "");
+	str = str.replace(/\{\}\{\}/g, "");
+	return str;
+}
+
+// Helper to fix unmatched braces similar to extension logic
+function fixUnmatchedBraces(str) {
+	let result = str;
+	let openCount = 0;
+	const chars = result.split("");
+
+	for (let i = 0; i < chars.length; i++) {
+		if (chars[i] === "{") {
+			openCount++;
+		} else if (chars[i] === "}") {
+			openCount--;
+			if (openCount < 0) {
+				openCount = 0;
+				chars[i] = "";
+			}
+		}
 	}
 
+	result = chars.filter((c) => c !== "").join("");
+	while (openCount > 0) {
+		result += "}";
+		openCount--;
+	}
+
+	return cleanupEmptyBraces(result);
+}
+
+function testSpecificIssues() {
 	// Simulate the complete processing pipeline
 	function processExpression(str) {
 		// Initial brace fix to mimic extension preprocessing
@@ -63,33 +90,6 @@ function testSpecificIssues() {
 		return count !== 0; // Unmatched opening braces
 	}
 
-	// Helper to fix unmatched braces similar to extension logic
-	function fixUnmatchedBraces(str) {
-		let result = str;
-		let openCount = 0;
-		const chars = result.split("");
-
-		for (let i = 0; i < chars.length; i++) {
-			if (chars[i] === "{") {
-				openCount++;
-			} else if (chars[i] === "}") {
-				openCount--;
-				if (openCount < 0) {
-					openCount = 0;
-					chars[i] = "";
-				}
-			}
-		}
-
-		result = chars.filter((c) => c !== "").join("");
-		while (openCount > 0) {
-			result += "}";
-			openCount--;
-		}
-
-		return cleanupEmptyBraces(result);
-	}
-
 	// Test cases for the specific issues
 	const testCases = [
 		{
@@ -111,7 +111,7 @@ function testSpecificIssues() {
 			shouldBeBalanced: true,
 		},
 		{
-			input: "\\int_{-\\infty}^{\\infty e^{-x^2} dx = \\sqrt{\\pi",
+			input: "\\sqrt{\\pi + \\frac{1}{2",
 			description: "Expression missing two closing braces",
 			shouldHaveEmptyBraces: false,
 			shouldBeBalanced: true,

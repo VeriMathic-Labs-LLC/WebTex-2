@@ -308,6 +308,18 @@ function reportKaTeXError(tex, error) {
 
 /* -------------------------------------------------- */
 // Enhanced Custom LaTeX Parser for edge cases
+
+function cleanupEmptyBraces(str) {
+	str = str.replace(/\{\}\{\}\{\}\^/g, "^");
+	str = str.replace(/\{\}\{\}\^/g, "^");
+	str = str.replace(/\{\}\^/g, "^");
+	str = str.replace(/\{\}\{\}(?!\^)/g, "");
+	str = str.replace(/\{\}\{\}\{\}(?!\^)/g, "");
+	str = str.replace(/\{\}\{\}\{\}\{\}(?!\^)/g, "");
+	str = str.replace(/\{\}\{\}/g, "");
+	return str;
+}
+
 class CustomLatexParser {
 	constructor() {
 		this.supportedEnvironments = [
@@ -726,16 +738,8 @@ class CustomLatexParser {
 			openCount--;
 		}
 
-		// Clean up multiple consecutive empty braces that cause delimiter balance issues
-		// Handle the specific case where empty braces are followed by superscripts
-		result = result.replace(/\{\}\{\}\{\}\^/g, "^"); // Remove three empty braces followed by ^
-		result = result.replace(/\{\}\{\}\^/g, "^"); // Remove two empty braces followed by ^
-		result = result.replace(/\{\}\^/g, "^"); // Remove one empty brace followed by ^
-
-		// Clean up other consecutive empty braces
-		result = result.replace(/\{\}\{\}(?!\^)/g, ""); // Remove pairs of empty braces not followed by ^
-		result = result.replace(/\{\}\{\}\{\}(?!\^)/g, ""); // Remove triplets of empty braces not followed by ^
-		result = result.replace(/\{\}\{\}\{\}\{\}(?!\^)/g, ""); // Remove quadruplets of empty braces not followed by ^
+		// Remove problematic empty brace sequences
+		result = cleanupEmptyBraces(result);
 
 		return result;
 	}
