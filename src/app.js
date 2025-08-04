@@ -618,7 +618,17 @@ class CustomLatexParser {
 
 		// Fix nested \text commands in nuclear notation like: \text{^{A}\text{N}} -> {}^{A}\text{N}
 		// This handles malformed input where superscript A and element N are both wrapped in \text{}
-		const MALFORMED_NESTED_TEXT_PATTERN = /\\text\{\\\^\{([^}]+)\}\\text\{([^}]*)\}\}/g;
+		// Multi-line, commented regex for maintainability
+		const MALFORMED_NESTED_TEXT_PATTERN = new RegExp(
+			[
+				// Match \text{^{A}\text{N}}
+				String.raw`\\text\{`,           // Match literal \text{
+				String.raw`\\\^\{([^}]+)\}`,    // Match ^{A} (superscript), capture A
+				String.raw`\\text\{([^}]*)\}`,  // Match \text{N}, capture N
+				String.raw`\}`                  // Match closing }
+			].join(''),
+			'g'
+		);
 		str = str.replace(MALFORMED_NESTED_TEXT_PATTERN, "{}^{$1}\\text{$2}");
 
 		// Final cleanup using the helper method
