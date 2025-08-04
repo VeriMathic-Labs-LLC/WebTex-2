@@ -308,6 +308,18 @@ function reportKaTeXError(tex, error) {
 
 /* -------------------------------------------------- */
 // Enhanced Custom LaTeX Parser for edge cases
+
+function cleanupEmptyBraces(str) {
+	str = str.replace(/\{\}\{\}\{\}\^/g, "^");
+	str = str.replace(/\{\}\{\}\^/g, "^");
+	str = str.replace(/\{\}\^/g, "^");
+	str = str.replace(/\{\}\{\}(?!\^)/g, "");
+	str = str.replace(/\{\}\{\}\{\}(?!\^)/g, "");
+	str = str.replace(/\{\}\{\}\{\}\{\}(?!\^)/g, "");
+	str = str.replace(/\{\}\{\}/g, "");
+	return str;
+}
+
 class CustomLatexParser {
 	constructor() {
 		this.supportedEnvironments = [
@@ -487,7 +499,7 @@ class CustomLatexParser {
 	processFractionNotation(str) {
 		// First, protect existing \frac commands to avoid breaking them
 		str = str.replace(/\\frac/g, "\\FRAC_TEMP");
-		
+
 		// Fix malformed fractions by ensuring they have two braced arguments
 		str = str.replace(/\\FRAC_TEMP(?![{[])/g, (match, offset) => {
 			const following = str.slice(offset + match.length);
@@ -507,17 +519,14 @@ class CustomLatexParser {
 
 		// Fix missing braces around denominator like \frac{a}{b + c}d → wrap single token
 		// But be careful not to break expressions with nested braces or superscripts
-		str = str.replace(
-			/\\FRAC_TEMP\{([^{}]+)\}([^{}\s])/g,
-			(_m, num, following) => {
-				// Only fix if the following character is not part of a superscript or subscript
-				// and if the numerator doesn't end with a superscript/subscript
-				if (!/[\^_]/.test(num.slice(-1)) && !/[\^_]/.test(following)) {
-					return `\\FRAC_TEMP{${num}}{${following}}`;
-				}
-				return _m; // Return original if it might break superscripts/subscripts
-			},
-		);
+		str = str.replace(/\\FRAC_TEMP\{([^{}]+)\}([^{}\s])/g, (_m, num, following) => {
+			// Only fix if the following character is not part of a superscript or subscript
+			// and if the numerator doesn't end with a superscript/subscript
+			if (!/[\^_]/.test(num.slice(-1)) && !/[\^_]/.test(following)) {
+				return `\\FRAC_TEMP{${num}}{${following}}`;
+			}
+			return _m; // Return original if it might break superscripts/subscripts
+		});
 
 		// Handle incomplete fractions at the end of expressions
 		str = str.replace(/\\FRAC_TEMP\{([^}]+)\}\{([^}]*)(?:\s*)$/g, "\\FRAC_TEMP{$1}{$2}");
@@ -527,10 +536,10 @@ class CustomLatexParser {
 
 		// rac{num}{den} - convert rac to \frac
 		str = str.replace(/rac\{([^}]+)\}\{([^}]+)\}/g, "\\frac{$1}{$2}");
-		
+
 		// rac27 pattern
 		str = str.replace(/\brac(\d)(\d+)/g, (_, a, b) => `\\frac{${a}}{${b}}`);
-		
+
 		// standalone rac - convert to \frac
 		str = str.replace(/\brac\b/g, "\\frac");
 
@@ -556,7 +565,7 @@ class CustomLatexParser {
 		// Handle \text{{}^{A}N} patterns - remove \text wrapper for nuclear notation
 		str = str.replace(
 			/\\text\{(\{\})?(\^\{[^}]+\})?(_\{[^}]+\})?([^}]*)\}/g,
-			(match, empty, sup, sub, rest) => {
+			(match, _empty, sup, sub, rest) => {
 				if (sup || sub) {
 					// This is nuclear notation inside \text{}, extract it
 					// Create proper nuclear notation format
@@ -621,15 +630,15 @@ class CustomLatexParser {
 		str = str.replace(/\{\}\{\}\{\}\^/g, "^"); // Remove three empty braces followed by ^
 		str = str.replace(/\{\}\{\}\^/g, "^"); // Remove two empty braces followed by ^
 		str = str.replace(/\{\}\^/g, "^"); // Remove one empty brace followed by ^
-		
+
 		// Clean up other consecutive empty braces
 		str = str.replace(/\{\}\{\}(?!\^)/g, ""); // Remove pairs of empty braces not followed by ^
 		str = str.replace(/\{\}\{\}\{\}(?!\^)/g, ""); // Remove triplets of empty braces not followed by ^
 		str = str.replace(/\{\}\{\}\{\}\{\}(?!\^)/g, ""); // Remove quadruplets of empty braces not followed by ^
-		
+
 		// Fix nuclear notation format: {^{A}} -> {}^{A}
 		str = str.replace(/\{(\^\{[^}]+\})\}/g, "{$1}");
-		
+
 		// Clean up remaining empty brace pairs that might be left
 		str = str.replace(/\{\}\{\}/g, "");
 
@@ -697,6 +706,7 @@ class CustomLatexParser {
 
 		// Fix unmatched braces in expressions
 		str = this.fixUnmatchedBraces(str);
+		str = cleanupEmptyBraces(str);
 
 		return str;
 	}
@@ -729,24 +739,7 @@ class CustomLatexParser {
 			openCount--;
 		}
 
-		// Handle nested braces more carefully
-		result = result.replace(/\}(\s*)\}/g, "}$1"); // Remove duplicate consecutive braces
-
-		// Clean up multiple consecutive empty braces that cause delimiter balance issues
-		// Handle the specific case where empty braces are followed by superscripts
-		result = result.replace(/\{\}\{\}\{\}\^/g, "^"); // Remove three empty braces followed by ^
-		result = result.replace(/\{\}\{\}\^/g, "^"); // Remove two empty braces followed by ^
-		result = result.replace(/\{\}\^/g, "^"); // Remove one empty brace followed by ^
-		
-		// Clean up other consecutive empty braces
-		result = result.replace(/\{\}\{\}(?!\^)/g, ""); // Remove pairs of empty braces not followed by ^
-		result = result.replace(/\{\}\{\}\{\}(?!\^)/g, ""); // Remove triplets of empty braces not followed by ^
-		result = result.replace(/\{\}\{\}\{\}\{\}(?!\^)/g, ""); // Remove quadruplets of empty braces not followed by ^
-
-		// Fix specific malformed fraction patterns
-		// Handle \frac{\pi^{2}{6} -> \frac{\pi^{2}}{6}
-		result = result.replace(/\\frac\{([^}]*\^\{[^}]*\})\{([^}]*)\}/g, "\\frac{$1}{$2}");
-
+		// Return result without cleanup; cleanup (e.g., removing empty braces) is handled by cleanupEmptyBraces in processTypoFixes
 		return result;
 	}
 
@@ -982,15 +975,11 @@ async function renderMathExpression(tex, displayMode = false, element = null) {
 	cleanedTex = cleanedTex.replace(/\{\}\{\}\{\}\^/g, "^"); // Remove three empty braces followed by ^
 	cleanedTex = cleanedTex.replace(/\{\}\{\}\^/g, "^"); // Remove two empty braces followed by ^
 	cleanedTex = cleanedTex.replace(/\{\}\^/g, "^"); // Remove one empty brace followed by ^
-	
+
 	// Clean up other consecutive empty braces
 	cleanedTex = cleanedTex.replace(/\{\}\{\}(?!\^)/g, ""); // Remove pairs of empty braces not followed by ^
 	cleanedTex = cleanedTex.replace(/\{\}\{\}\{\}(?!\^)/g, ""); // Remove triplets of empty braces not followed by ^
 	cleanedTex = cleanedTex.replace(/\{\}\{\}\{\}\{\}(?!\^)/g, ""); // Remove quadruplets of empty braces not followed by ^
-
-	// Fix specific malformed fraction patterns before processing
-	// Handle \frac{\pi^{2}{6} -> \frac{\pi^{2}}{6}
-	cleanedTex = cleanedTex.replace(/\\frac\{([^}]*\^\{[^}]*\})\{([^}]*)\}/g, "\\frac{$1}{$2}");
 
 	// Handle display mode delimiters
 	const isDisplayMath =
@@ -1014,6 +1003,12 @@ async function renderMathExpression(tex, displayMode = false, element = null) {
 	} else {
 		// In inline mode, replace with actual line breaks
 		cleanedTex = cleanedTex.replace(/\\(?:newline|\\)\s*\n?/g, "\\\\");
+	}
+
+	// Fix unmatched braces before checking balance
+	if (customParser && typeof customParser.fixUnmatchedBraces === "function") {
+		cleanedTex = customParser.fixUnmatchedBraces(cleanedTex);
+		cleanedTex = cleanupEmptyBraces(cleanedTex);
 	}
 
 	// Check for unbalanced delimiters with more detailed reporting
