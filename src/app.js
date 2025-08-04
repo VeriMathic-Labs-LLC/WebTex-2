@@ -473,6 +473,17 @@ class CustomLatexParser {
 	}
 
 	fixMalformedLatex(str) {
+		// Pre-process common malformed patterns
+		// Fix incomplete \text{} commands
+		str = str.replace(/\\text(?!\s*\{)/g, "\\text{}");
+		str = str.replace(/\\text$/g, "\\text{}");
+		str = str.replace(/\\text\s+(?!\{)/g, "\\text{} ");
+
+		// Fix malformed integrals with missing superscripts
+		str = str.replace(/\\int_\{([^}]+)\}\^/g, "\\int_{$1}^{}");
+		str = str.replace(/\\int_\{([^}]+)\}\^$/g, "\\int_{$1}^{}");
+		str = str.replace(/\\int_\{([^}]+)\}\^\s/g, "\\int_{$1}^{} ");
+
 		let fixed = "";
 		let i = 0;
 		while (i < str.length) {
@@ -499,6 +510,29 @@ class CustomLatexParser {
 							}
 						} else {
 							fixed += "{}";
+						}
+					} else if (command === "\\text") {
+						// Handle incomplete \text{} commands
+						const argResult = this.getNextArgument(str, i);
+						if (argResult) {
+							fixed += `{${argResult.value}}`;
+							i += argResult.length;
+						} else {
+							fixed += "{}";
+						}
+					} else if (command === "\\int") {
+						// Handle integrals with missing superscripts
+						// Look ahead to see if there's a ^ without a following group
+						if (i < str.length && str[i] === "^") {
+							fixed += "^";
+							i++;
+							const argResult = this.getNextArgument(str, i);
+							if (argResult) {
+								fixed += `{${argResult.value}}`;
+								i += argResult.length;
+							} else {
+								fixed += "{}";
+							}
 						}
 					}
 				} else {
@@ -659,6 +693,10 @@ class CustomLatexParser {
 		// Fix nuclear notation format: {^{A}} -> {}^{A}
 		str = str.replace(/\{(\^\{[^}]+\})\}/g, "{$1}");
 
+		// Fix any \text{} commands that contain superscripts (which cause KaTeX errors)
+		// Pattern: \text{^{A}N} -> {}^{A}\text{N}
+		str = str.replace(/\\text\{\^\{([^}]+)\}([^}]*)\}/g, "{}^{$1}\\text{$2}");
+
 		// Fix nested \text commands in nuclear notation like: \text{^{A}\text{N}} -> {}^{A}\text{N}
 		// This handles malformed input where superscript A and element N are both wrapped in \text{}
 		// Multi-line, commented regex for maintainability
@@ -674,8 +712,10 @@ class CustomLatexParser {
 		);
 		str = str.replace(MALFORMED_NESTED_TEXT_PATTERN, "{}^{$1}\\text{$2}");
 
+
 		// Handle nested form without escaped caret: \text{^{A}\text{N}} -> {}^{A}\text{N}
 		str = str.replace(/\\text\{\^\{([^}]+)\}\\text\{([^}]+)\}\}/g, "{}^{$1}\\text{$2}");
+
 
 		// Final cleanup using the helper method
 		str = cleanupEmptyBraces(str);
@@ -739,8 +779,7 @@ class CustomLatexParser {
 		// Fix missing braces in limits: \lim_{x o infty} -> \lim_{x \to \infty}
 		str = str.replace(/\\lim_\{([^}]*)\s+o\s+infty\}/g, "\\lim_{$1 \\to \\infty}");
 
-		// Delegate incomplete command and integral fixes to shared helper
-		str = fixIncompleteCommands(str);
+
 
 		// Auto-wrap bare ^ and _ arguments with braces
 		str = str.replace(/(\^|_)(?![{\\])\s*([A-Za-z0-9+-])/g, "$1{$2}");
