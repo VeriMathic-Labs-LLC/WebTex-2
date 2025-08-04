@@ -369,6 +369,11 @@ function fixIncompleteCommands(str) {
     // Replace standalone \right), \right], etc. without matching \left
     str = str.replace(/\\right\s*([\)\]\}\|\.])/g, "$1");
 
+    // Remove any remaining standalone \\left or \\right that are not followed by a delimiter character.
+    // These often cause false "Unmatched delimiter" warnings later in the pipeline.
+    str = str.replace(/\\left\s*(?=\s|$)/g, "");
+    str = str.replace(/\\right\s*(?=\s|$)/g, "");
+
     // --- Generic: caret without superscript right before math delimiter or end
     // e.g., "^$", "^\\)" or "^" at string end
     // Insert a thin space (\\,) as placeholder so KaTeX accepts the group.
@@ -1012,7 +1017,7 @@ function hasUnbalancedDelimiters(str) {
 
 			if (stack.length === 0 || !isLeftRightPair(stack[stack.length - 1], fullCommand)) {
 				// Warn in console when unmatched delimiter is detected, but avoid using console.log
-				console.warn(`Unmatched delimiter: ${fullCommand}`);
+				// console.debug(`Unmatched delimiter suppressed: ${fullCommand}`);
 				return true; // Unmatched \\right
 			}
 			stack.pop();
@@ -1119,18 +1124,8 @@ async function renderMathExpression(tex, displayMode = false, element = null) {
 		prefixedTex = cleanupEmptyBraces(prefixedTex);
 	}
 
-	// Check for unbalanced delimiters with more detailed reporting
-	if (hasUnbalancedDelimiters(prefixedTex)) {
-		console.warn(`Unbalanced delimiters in: ${prefixedTex}`);
-		if (element) {
-			const fb = customParser.renderFallback(tex, isDisplayMath);
-			element.innerHTML = "";
-			element.appendChild(fb);
-			element.classList.add("webtex-error-fallback");
-			element.title = "Unbalanced delimiters";
-		}
-		return { success: false, method: "unbalanced", element };
-	}
+	// Delimiter balance issues will now be handled by KaTeX itself; we defer checks
+    // until after an initial KaTeX parse attempt to minimise false positives.
 
 	// Try KaTeX first with the original text
 	try {
