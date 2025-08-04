@@ -29,8 +29,13 @@ function testDelimiterBalance() {
 			// Check for LaTeX commands
 			if (char === "\\") {
 				// Look for \left or \right commands
-				const leftMatch = str.slice(i).match(/^\\left[([{|.||lfloorlceillangle]/);
-				const rightMatch = str.slice(i).match(/^\\right[)\]}|.||\rfloor\rceil\rangle]/);
+				// Corrected regex patterns to accurately match LaTeX \left... and \right... delimiters
+				const leftMatch = str
+					.slice(i)
+					.match(/^\\left(?:\(|\[|\\\{|\\.|\||\\\||\\lfloor|\\lceil|\\langle)/);
+				const rightMatch = str
+					.slice(i)
+					.match(/^\\right(?:\)|\]|\\\}|\\.|\||\\\||\\rfloor|\\rceil|\\rangle)/);
 
 				if (leftMatch) {
 					const leftCmd = leftMatch[0];
