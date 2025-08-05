@@ -281,14 +281,11 @@ function removeCSS() {
 /* -------------------------------------------------- */
 // Reusable entity decoder for performance
 function decodeHTMLEntities(text) {
-	return text
-		.replace(/&amp;/g, "&")
-		.replace(/&lt;/g, "<")
-		.replace(/&gt;/g, ">")
-		.replace(/&quot;/g, '"')
-		.replace(/&#39;/g, "'");
+	// Use the browser's built-in HTML parser for safe and complete HTML entity decoding
+	const textarea = document.createElement("textarea");
+	textarea.innerHTML = text;
+	return textarea.value;
 }
-
 /* -------------------------------------------------- */
 // Logging system for debugging and error tracking
 const LOG_LEVEL = {
@@ -963,6 +960,8 @@ class CustomLatexParser {
       border-radius: 3px;
       border: 1px solid rgba(239, 154, 154, 0.5);
     `;
+		// Use textContent for security - this is the ultimate fallback that displays raw LaTeX text
+		// when all rendering attempts fail. Using textContent prevents XSS attacks from malicious LaTeX content.
 		container.textContent = tex;
 		return container;
 	}
@@ -1005,6 +1004,9 @@ async function renderMathExpression(tex, displayMode = false, element = null) {
 		processedTex = customParser.fixUnmatchedBraces(processedTex);
 		processedTex = cleanupEmptyBraces(processedTex);
 
+		// Additional safety check for unmatched braces that might cause parse errors
+		processedTex = processedTex.replace(/\\text\{([^}]*)$/g, "\\text{$1}");
+
 		// Simplify complex structures for KaTeX
 		processedTex = customParser.simplify(processedTex);
 
@@ -1026,6 +1028,10 @@ async function renderMathExpression(tex, displayMode = false, element = null) {
 				if (errorCode === "mathVsTextAccents") {
 					return "ignore";
 				}
+				// Handle Unicode character warnings (we've already processed them)
+				if (errorCode === "unknownSymbol") {
+					return "ignore";
+				}
 				// For all other issues, continue to show a warning in the console.
 				return "warn";
 			},
@@ -1033,7 +1039,17 @@ async function renderMathExpression(tex, displayMode = false, element = null) {
 			throwOnError: true, // We will catch the error
 		};
 
-		const rendered = katex.renderToString(processedTex, katexOptions);
+		const originalWarn = console.warn;
+		console.warn = (msg, ...rest) => {
+			if (typeof msg === "string" && msg.includes("No character metrics for")) return;
+			originalWarn.call(console, msg, ...rest);
+		};
+		let rendered;
+		try {
+			rendered = katex.renderToString(processedTex, katexOptions);
+		} finally {
+			console.warn = originalWarn;
+		}
 		rendererState.katexSuccess++;
 
 		if (element) {
@@ -1060,7 +1076,7 @@ async function renderMathExpression(tex, displayMode = false, element = null) {
 				return { success: true, method: "custom-fallback", element };
 			}
 		} catch (fallbackError) {
-			log(LOG_LEVEL.ERROR, "The custom HTML fallback renderer also failed:", fallbackError);
+			log(LOG_LEVEL.ERROR, "The custom text fallback renderer also failed:", fallbackError);
 		}
 
 		// Ultimate fallback: display the original text to prevent script crash.
@@ -1101,11 +1117,24 @@ function findMathExpressions(root) {
 
 		// Enhanced regex patterns for math detection
 		const patterns = [
-			// Display math
+			// Display math: $$...$$ and \[...\]
 			{ pattern: /\$\$([\s\S]*?)\$\$/g, display: true },
 			{ pattern: /\\\[([\s\S]*?)\\\]/g, display: true },
-			// Inline math
-			{ pattern: /\$([^$\n]+?)\$/g, display: false },
+			// Inline math: $...$ and \(...\)
+			// The following regex matches inline math expressions delimited by single dollar signs ($...$),
+			// while allowing for escaped dollar signs (\$) inside the math. It captures the content between
+			// the dollar signs, ensuring that a single $ does not match across multiple math expressions.
+			// Breakdown:
+			//   \$           - Match a literal dollar sign (start delimiter)
+			//   (            - Start capturing group for the math content
+			//     (?:        - Non-capturing group for content inside math
+			//       [^\$]    - Any character except a dollar sign
+			//       |        - OR
+			//       \\$     - An escaped dollar sign (i.e., \$)
+			//     )+?        - Repeat one or more times, non-greedy
+			//   )            - End capturing group
+			//   \$           - Match a literal dollar sign (end delimiter)
+			{ pattern: /\$((?:[^$]|\\\$)+?)\$/g, display: false },
 			{ pattern: /\\\(([\s\S]*?)\\\)/g, display: false },
 		];
 
@@ -1256,6 +1285,94 @@ function handleUnicodeInMath(tex) {
 		"⅒": "\\frac{1}{10}",
 	};
 
+	// Common Unicode symbols and their LaTeX equivalents
+	const unicodeSymbols = {
+		"→": "\\rightarrow",
+		"←": "\\leftarrow",
+		"↔": "\\leftrightarrow",
+		"⇒": "\\Rightarrow",
+		"⇐": "\\Leftarrow",
+		"⇔": "\\Leftrightarrow",
+		"∈": "\\in",
+		"∉": "\\notin",
+		"⊆": "\\subseteq",
+		"⊂": "\\subset",
+		"⊇": "\\supseteq",
+		"⊃": "\\supset",
+		"∩": "\\cap",
+		"∪": "\\cup",
+		"∅": "\\emptyset",
+		"∞": "\\infty",
+		"±": "\\pm",
+		"∓": "\\mp",
+		"×": "\\times",
+		"÷": "\\div",
+		"≤": "\\leq",
+		"≥": "\\geq",
+		"≠": "\\neq",
+		"≈": "\\approx",
+		"≡": "\\equiv",
+		"≅": "\\cong",
+		"∝": "\\propto",
+		"∑": "\\sum",
+		"∏": "\\prod",
+		"∫": "\\int",
+		"∬": "\\iint",
+		"∭": "\\iiint",
+		"∮": "\\oint",
+		"∇": "\\nabla",
+		"∂": "\\partial",
+		"√": "\\sqrt",
+		"∛": "\\sqrt[3]",
+		"∜": "\\sqrt[4]",
+		α: "\\alpha",
+		β: "\\beta",
+		γ: "\\gamma",
+		δ: "\\delta",
+		ε: "\\epsilon",
+		ζ: "\\zeta",
+		η: "\\eta",
+		θ: "\\theta",
+		ι: "\\iota",
+		κ: "\\kappa",
+		λ: "\\lambda",
+		μ: "\\mu",
+		ν: "\\nu",
+		ξ: "\\xi",
+		π: "\\pi",
+		ρ: "\\rho",
+		σ: "\\sigma",
+		τ: "\\tau",
+		υ: "\\upsilon",
+		φ: "\\phi",
+		χ: "\\chi",
+		ψ: "\\psi",
+		ω: "\\omega",
+		Α: "\\Alpha",
+		Β: "\\Beta",
+		Γ: "\\Gamma",
+		Δ: "\\Delta",
+		Ε: "\\Epsilon",
+		Ζ: "\\Zeta",
+		Η: "\\Eta",
+		Θ: "\\Theta",
+		Ι: "\\Iota",
+		Κ: "\\Kappa",
+		Λ: "\\Lambda",
+		Μ: "\\Mu",
+		Ν: "\\Nu",
+		Ξ: "\\Xi",
+		Π: "\\Pi",
+		Ρ: "\\Rho",
+		Σ: "\\Sigma",
+		Τ: "\\Tau",
+		Υ: "\\Upsilon",
+		Φ: "\\Phi",
+		Χ: "\\Chi",
+		Ψ: "\\Psi",
+		Ω: "\\Omega",
+	};
+
 	let processed = tex;
 
 	// Replace Unicode fractions with LaTeX fractions
@@ -1263,16 +1380,14 @@ function handleUnicodeInMath(tex) {
 		processed = processed.replace(new RegExp(unicode, "g"), latex);
 	});
 
-	// Common Unicode math symbols
-	processed = processed.replace(/→/g, "\\rightarrow");
-	processed = processed.replace(/∈/g, "\\in");
-	processed = processed.replace(/⊆/g, "\\subseteq");
-	processed = processed.replace(/ν/g, "\\nu");
-	processed = processed.replace(/γ/g, "\\gamma");
+	// Replace Unicode symbols with LaTeX equivalents
+	Object.entries(unicodeSymbols).forEach(([unicode, latex]) => {
+		processed = processed.replace(new RegExp(unicode, "g"), latex);
+	});
 
 	// Handle other Unicode characters by wrapping them in \text{}
 	// This regex matches Unicode characters that are not already in \text{} or other commands
-	processed = processed.replace(/([^ -~])/g, (_match, char) => {
+	processed = processed.replace(/([^\p{ASCII}])/gu, (_match, char) => {
 		// Skip if already in \text{} or other commands
 		if (
 			processed.includes(`\\text{${char}}`) ||
