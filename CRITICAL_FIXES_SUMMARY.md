@@ -45,7 +45,7 @@ function decodeHTMLEntities(text) {
     return doc.body.textContent || "";
 }
 
-**File**: `src/app.js` lines 283-289
+**File**: `src/app.js` lines 284-293
 
 ### 3. ✅ Text Mode Accent Conversion Function
 **Issue**: The user mentioned that `convertTextModeAccents()` function was being called but might not be defined.
