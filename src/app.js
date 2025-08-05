@@ -1288,8 +1288,9 @@ function preprocessMathText(node) {
 			text = customParser.processNuclearNotation(text);
 
 			// Enhanced environment handling
+			// Upgrade single-$ wrapped environments (but skip if already in $$)
 			text = text.replace(
-				/\$\s*\\begin\{([^}]+)\}([\s\S]*?)\\end\{\1\}\s*\$/g,
+				/(?<!\$)\$\s*\\begin\{([^}]+)\}([\s\S]*?)\\end\{\1\}\s*\$(?!\$)/g,
 				(_m, env, content) => {
 					const decodedContent = decodeHTMLEntities(content);
 					return `$$\\begin{${env}}${decodedContent}\\end{${env}}$$`;
