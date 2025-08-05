@@ -1116,7 +1116,7 @@ function findMathExpressions(root) {
 			//     )+?        - Repeat one or more times, non-greedy
 			//   )            - End capturing group
 			//   \$           - Match a literal dollar sign (end delimiter)
-			{ pattern: /\$((?:[^\$]|\\\$)+?)\$/g, display: false },
+			{ pattern: /\$((?:[^$]|\\\$)+?)\$/g, display: false },
 			{ pattern: /\\\(([\s\S]*?)\\\)/g, display: false },
 		];
 
