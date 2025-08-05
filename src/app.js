@@ -1361,14 +1361,6 @@ function handleUnicodeInMath(tex) {
 		Χ: "\\Chi",
 		Ψ: "\\Psi",
 		Ω: "\\Omega",
-		"❌": "\\text{❌}",
-		"✅": "\\text{✅}",
-		"✔": "\\text{✔}",
-		"✘": "\\text{✘}",
-		"✓": "\\text{✓}",
-		"☐": "\\text{☐}",
-		"☑": "\\text{☑}",
-		"☒": "\\text{☒}",
 	};
 
 	let processed = tex;
@@ -1385,7 +1377,7 @@ function handleUnicodeInMath(tex) {
 
 	// Handle other Unicode characters by wrapping them in \text{}
 	// This regex matches Unicode characters that are not already in \text{} or other commands
-	processed = processed.replace(/([^ -~])/g, (_match, char) => {
+	processed = processed.replace(/([^\p{ASCII}])/gu, (_match, char) => {
 		// Skip if already in \text{} or other commands
 		if (
 			processed.includes(`\\text{${char}}`) ||
