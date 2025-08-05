@@ -1114,7 +1114,7 @@ function findMathExpressions(root) {
 			//     (?:        - Non-capturing group for content inside math
 			//       [^\$]    - Any character except a dollar sign
 			//       |        - OR
-			//       \\\\\$     - An escaped dollar sign (i.e., \$)
+			//       \\$     - An escaped dollar sign (i.e., \$)
 			//     )+?        - Repeat one or more times, non-greedy
 			//   )            - End capturing group
 			//   \$           - Match a literal dollar sign (end delimiter)
