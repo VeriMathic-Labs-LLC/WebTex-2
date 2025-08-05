@@ -40,7 +40,11 @@ class LatexRenderer {
 		let html = latex.trim();
 
 		// Remove LaTeX delimiters
-		html = html.replace(/^\$\$|\$\$$/g, "").replace(/^\$|\$$/g, "");
+		if (html.startsWith("$$") && html.endsWith("$$")) {
+			html = html.substring(2, html.length - 2);
+		} else if (html.startsWith("$") && html.endsWith("$")) {
+			html = html.substring(1, html.length - 1);
+		}
 
 		// Clean up any malformed expressions
 		html = this.cleanupMalformedLatex(html);

@@ -43,11 +43,7 @@
 
 
 
-Delimiter-stripping is too simplistic
-js
-html = html.replace(/^\$\$|\$\$$/g,"").replace(/^\$|\$$/g,"");
-Strips only the first or last $$/$, can mis-handle odd counts or nested delimiters.
-Leads to off-by-one removals.
+
 Unbalanced-brace “fix” can corrupt nesting
 cleanupMalformedLatex
  simply counts {/} and appends } at end. For deeply nested or interleaved {} this can produce invalid structure instead of surfacing the error.
