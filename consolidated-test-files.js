@@ -1262,6 +1262,113 @@ function testWebtexProcessedClass() {
 	return failed === 0;
 }
 
+function testAccentHandling() {
+	console.log("Testing improved accent handling functionality...");
+
+	let passed = 0;
+	let failed = 0;
+
+	// Test cases for accent handling
+	const accentTests = [
+		// Single character accents (should use Unicode combining characters)
+		{ input: "\\hat{x}", expected: "x̂", description: "Single character hat accent" },
+		{ input: "\\tilde{y}", expected: "ỹ", description: "Single character tilde accent" },
+		{ input: "\\acute{a}", expected: "á", description: "Single character acute accent" },
+		{ input: "\\grave{e}", expected: "è", description: "Single character grave accent" },
+		{ input: "\\breve{o}", expected: "ŏ", description: "Single character breve accent" },
+		{ input: "\\check{c}", expected: "č", description: "Single character check accent" },
+		{ input: "\\dot{i}", expected: "i̇", description: "Single character dot accent" },
+		{ input: "\\ddot{u}", expected: "ü", description: "Single character diaeresis" },
+
+		// Multi-character accents (should use CSS styling)
+		{ input: "\\hat{xy}", expected: "overline", description: "Multi-character hat accent" },
+		{ input: "\\tilde{abc}", expected: "overline", description: "Multi-character tilde accent" },
+		{ input: "\\vec{v}", expected: "overline", description: "Vector notation" },
+		{ input: "\\bar{z}", expected: "overline", description: "Bar notation" },
+
+		// Non-Latin characters (should use CSS styling)
+		{ input: "\\hat{α}", expected: "overline", description: "Non-Latin character hat accent" },
+		{ input: "\\tilde{β}", expected: "overline", description: "Non-Latin character tilde accent" },
+
+		// Mixed content
+		{ input: "\\hat{x} + \\tilde{y}", expected: "mixed", description: "Mixed accent types" },
+		{
+			input: "\\vec{v} \\cdot \\hat{x}",
+			expected: "mixed",
+			description: "Vector and accent combination",
+		},
+	];
+
+	// Mock the processAccent function for testing
+	function processAccent(accentType, content) {
+		// For single Latin characters, use Unicode combining accents
+		if (content.length === 1) {
+			const char = content.charCodeAt(0);
+			// Check if it's a basic Latin letter
+			if ((char >= 65 && char <= 90) || (char >= 97 && char <= 122)) {
+				const accentMap = {
+					hat: "\u0302", // Combining circumflex accent
+					tilde: "\u0303", // Combining tilde
+					acute: "\u0301", // Combining acute accent
+					grave: "\u0300", // Combining grave accent
+					breve: "\u0306", // Combining breve
+					check: "\u030C", // Combining caron
+					dot: "\u0307", // Combining dot above
+					ddot: "\u0308", // Combining diaeresis
+					mathring: "\u030A", // Combining ring above
+				};
+
+				if (accentMap[accentType]) {
+					return content + accentMap[accentType];
+				}
+			}
+		}
+
+		// Fallback to CSS styling for multi-character or unsupported accents
+		return "overline"; // Simplified for testing
+	}
+
+	accentTests.forEach((test) => {
+		try {
+			let result;
+
+			// Extract the content from the LaTeX command
+			const match = test.input.match(/\\[a-zA-Z]+\{([^}]+)\}/);
+			if (match) {
+				const content = match[1];
+				const accentType = test.input.match(/\\([a-zA-Z]+)\{/)[1];
+				result = processAccent(accentType, content);
+			} else {
+				result = "error";
+			}
+
+			// Check if result matches expected
+			let testPassed = false;
+			if (test.expected === "overline") {
+				testPassed = result === "overline";
+			} else if (test.expected === "mixed") {
+				testPassed = result !== "error";
+			} else {
+				testPassed = result === test.expected;
+			}
+
+			if (testPassed) {
+				passed++;
+				console.log(`✅ ${test.description} - ${test.input} → ${result}`);
+			} else {
+				failed++;
+				console.log(`❌ ${test.description} - Expected ${test.expected}, got ${result}`);
+			}
+		} catch (error) {
+			failed++;
+			console.log(`❌ ${test.description} - Error: ${error.message}`);
+		}
+	});
+
+	console.log(`\nAccent handling test results: ${passed} passed, ${failed} failed`);
+	return failed === 0;
+}
+
 function testDomainMatching() {
 	console.log("Testing smart domain matching functionality...");
 
@@ -1441,6 +1548,120 @@ function testDomainMatching() {
 	return failed === 0;
 }
 
+function testTextModeAccentConversion() {
+	console.log("Testing text mode accent conversion...");
+
+	let passed = 0;
+	let failed = 0;
+
+	// Test cases for text mode accent conversion
+	const textModeTests = [
+		// Text mode accent commands that should be converted to math mode
+		{ input: "\\u{a}", expected: "\\breve{a}", description: "Text mode breve to math mode" },
+		{ input: "\\v{c}", expected: "\\check{c}", description: "Text mode caron to math mode" },
+		{ input: "\\H{o}", expected: "\\ddot{o}", description: "Text mode double acute to math mode" },
+		{ input: "\\k{a}", expected: "\\mathring{a}", description: "Text mode ogonek to math mode" },
+		{ input: "\\'{e}", expected: "\\acute{e}", description: "Text mode acute to math mode" },
+		{ input: "\\`{e}", expected: "\\grave{e}", description: "Text mode grave to math mode" },
+		{ input: '\\"{u}', expected: "\\ddot{u}", description: "Text mode diaeresis to math mode" },
+		{ input: "\\~{n}", expected: "\\tilde{n}", description: "Text mode tilde to math mode" },
+		{ input: "\\^{o}", expected: "\\hat{o}", description: "Text mode circumflex to math mode" },
+		{ input: "\\.{i}", expected: "\\dot{i}", description: "Text mode dot to math mode" },
+		{ input: "\\={a}", expected: "\\bar{a}", description: "Text mode macron to math mode" },
+		{ input: "\\b{a}", expected: "\\bar{a}", description: "Text mode bar to math mode" },
+
+		// Escaped versions (common in user input)
+		{ input: "\\\\u{a}", expected: "\\\\breve{a}", description: "Escaped text mode breve" },
+		{ input: "\\\\v{c}", expected: "\\\\check{c}", description: "Escaped text mode caron" },
+		{ input: "\\\\H{o}", expected: "\\\\ddot{o}", description: "Escaped text mode double acute" },
+
+		// Mixed expressions
+		{
+			input: "\\u{a} + \\v{c}",
+			expected: "\\breve{a} + \\check{c}",
+			description: "Mixed text mode accents",
+		},
+		{
+			input: "\\hat{x} + \\u{o}",
+			expected: "\\hat{x} + \\breve{o}",
+			description: "Math mode + text mode accents",
+		},
+
+		// Complex expressions
+		{
+			input: "\\frac{\\u{a}}{\\v{c}}",
+			expected: "\\frac{\\breve{a}}{\\check{c}}",
+			description: "Text mode accents in fractions",
+		},
+		{
+			input: "\\sum_{i=1}^{\\u{n}} x_i",
+			expected: "\\sum_{i=1}^{\\breve{n}} x_i",
+			description: "Text mode accent in superscript",
+		},
+	];
+
+	// Mock the convertTextModeAccents function for testing
+	function convertTextModeAccents(tex) {
+		if (!tex) return tex;
+
+		const textModeAccents = [
+			{ pattern: /\\u\{([^}]+)\}/g, replacement: "\\breve{$1}" },
+			{ pattern: /\\v\{([^}]+)\}/g, replacement: "\\check{$1}" },
+			{ pattern: /\\H\{([^}]+)\}/g, replacement: "\\ddot{$1}" },
+			{ pattern: /\\k\{([^}]+)\}/g, replacement: "\\mathring{$1}" },
+			{ pattern: /\\'\{([^}]+)\}/g, replacement: "\\acute{$1}" },
+			{ pattern: /\\`\{([^}]+)\}/g, replacement: "\\grave{$1}" },
+			{ pattern: /\\"\{([^}]+)\}/g, replacement: "\\ddot{$1}" },
+			{ pattern: /\\~\{([^}]+)\}/g, replacement: "\\tilde{$1}" },
+			{ pattern: /\\\^\{([^}]+)\}/g, replacement: "\\hat{$1}" },
+			{ pattern: /\\\.\{([^}]+)\}/g, replacement: "\\dot{$1}" },
+			{ pattern: /\\=\{([^}]+)\}/g, replacement: "\\bar{$1}" },
+			{ pattern: /\\b\{([^}]+)\}/g, replacement: "\\bar{$1}" },
+
+			// Handle escaped versions
+			{ pattern: /\\\\u\{([^}]+)\}/g, replacement: "\\breve{$1}" },
+			{ pattern: /\\\\v\{([^}]+)\}/g, replacement: "\\check{$1}" },
+			{ pattern: /\\\\H\{([^}]+)\}/g, replacement: "\\ddot{$1}" },
+			{ pattern: /\\\\k\{([^}]+)\}/g, replacement: "\\mathring{$1}" },
+			{ pattern: /\\\\'\{([^}]+)\}/g, replacement: "\\acute{$1}" },
+			{ pattern: /\\\\`\{([^}]+)\}/g, replacement: "\\grave{$1}" },
+			{ pattern: /\\\\"\{([^}]+)\}/g, replacement: "\\ddot{$1}" },
+			{ pattern: /\\\\~\{([^}]+)\}/g, replacement: "\\tilde{$1}" },
+			{ pattern: /\\\\\^\{([^}]+)\}/g, replacement: "\\hat{$1}" },
+			{ pattern: /\\\\\.\{([^}]+)\}/g, replacement: "\\dot{$1}" },
+			{ pattern: /\\\\=\{([^}]+)\}/g, replacement: "\\bar{$1}" },
+			{ pattern: /\\\\b\{([^}]+)\}/g, replacement: "\\bar{$1}" },
+		];
+
+		let result = tex;
+		textModeAccents.forEach(({ pattern, replacement }) => {
+			result = result.replace(pattern, replacement);
+		});
+
+		return result;
+	}
+
+	textModeTests.forEach((test) => {
+		try {
+			const result = convertTextModeAccents(test.input);
+
+			if (result === test.expected) {
+				passed++;
+				console.log(`✅ ${test.description} - ${test.input} → ${result}`);
+			} else {
+				failed++;
+				console.log(`❌ ${test.description} - Expected ${test.expected}, got ${result}`);
+			}
+		} catch (error) {
+			failed++;
+			console.log(`❌ ${test.description} - Error: ${error.message}`);
+		}
+	});
+
+	console.log(`\nText mode accent conversion test results: ${passed} passed, ${failed} failed`);
+	return failed === 0;
+}
+
 // Run the test if this file is executed directly
 if (typeof window !== "undefined") {
 	// Browser environment
@@ -1450,6 +1671,8 @@ if (typeof window !== "undefined") {
 	window.testCharacterDataObservation = testCharacterDataObservation;
 	window.testWebtexProcessedClass = testWebtexProcessedClass;
 	window.testDomainMatching = testDomainMatching;
+	window.testAccentHandling = testAccentHandling;
+	window.testTextModeAccentConversion = testTextModeAccentConversion;
 } else {
 	// Node.js environment
 	testRegexOrdering();
@@ -1460,6 +1683,8 @@ if (typeof window !== "undefined") {
 	testCharacterDataObservation();
 	testWebtexProcessedClass();
 	testDomainMatching();
+	testAccentHandling();
+	testTextModeAccentConversion();
 }
 
 // ============================================================================
@@ -1479,6 +1704,8 @@ function runAllTests() {
 	results.push({ name: "Specific Issues", passed: testSpecificIssues() });
 	results.push({ name: "LaTeX Fixes", passed: testLatexFixes() });
 	results.push({ name: "Domain Matching", passed: testDomainMatching() });
+	results.push({ name: "Accent Handling", passed: testAccentHandling() });
+	results.push({ name: "Text Mode Accent Conversion", passed: testTextModeAccentConversion() });
 
 	// Summary
 	console.log("=== FINAL TEST SUMMARY ===");

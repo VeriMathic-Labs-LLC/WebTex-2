@@ -1011,12 +1011,19 @@ async function renderMathExpression(tex, displayMode = false, element = null) {
 		// Handle Unicode characters
 		processedTex = handleUnicodeInMath(processedTex);
 
+		// Convert text mode accent commands to math mode equivalents
+		processedTex = convertTextModeAccents(processedTex);
+
 		const katexOptions = {
 			displayMode: isDisplayMath,
 			errorColor: "inherit",
 			strict: (errorCode) => {
 				// This is a known, safe-to-ignore warning for matrices and aligned environments.
 				if (errorCode === "newLineInDisplayMode") {
+					return "ignore";
+				}
+				// Handle text mode accent commands in math mode (common in user input)
+				if (errorCode === "mathVsTextAccents") {
 					return "ignore";
 				}
 				// For all other issues, continue to show a warning in the console.
@@ -1278,6 +1285,49 @@ function handleUnicodeInMath(tex) {
 	});
 
 	return processed;
+}
+
+// Convert text mode accent commands to math mode equivalents
+function convertTextModeAccents(tex) {
+	if (!tex) return tex;
+
+	// Common text mode accent commands that should be converted to math mode
+	const textModeAccents = [
+		// Single character accents
+		{ pattern: /\\u\{([^}]+)\}/g, replacement: "\\breve{$1}" }, // breve
+		{ pattern: /\\v\{([^}]+)\}/g, replacement: "\\check{$1}" }, // caron/hacek
+		{ pattern: /\\H\{([^}]+)\}/g, replacement: "\\ddot{$1}" }, // double acute
+		{ pattern: /\\k\{([^}]+)\}/g, replacement: "\\mathring{$1}" }, // ogonek
+		{ pattern: /\\'\{([^}]+)\}/g, replacement: "\\acute{$1}" }, // acute
+		{ pattern: /\\`\{([^}]+)\}/g, replacement: "\\grave{$1}" }, // grave
+		{ pattern: /\\"\{([^}]+)\}/g, replacement: "\\ddot{$1}" }, // diaeresis
+		{ pattern: /\\~\{([^}]+)\}/g, replacement: "\\tilde{$1}" }, // tilde
+		{ pattern: /\\\^\{([^}]+)\}/g, replacement: "\\hat{$1}" }, // circumflex
+		{ pattern: /\\\.\{([^}]+)\}/g, replacement: "\\dot{$1}" }, // dot
+		{ pattern: /\\=\{([^}]+)\}/g, replacement: "\\bar{$1}" }, // macron
+		{ pattern: /\\b\{([^}]+)\}/g, replacement: "\\bar{$1}" }, // bar
+
+		// Handle escaped versions (common in user input)
+		{ pattern: /\\\\u\{([^}]+)\}/g, replacement: "\\breve{$1}" },
+		{ pattern: /\\\\v\{([^}]+)\}/g, replacement: "\\check{$1}" },
+		{ pattern: /\\\\H\{([^}]+)\}/g, replacement: "\\ddot{$1}" },
+		{ pattern: /\\\\k\{([^}]+)\}/g, replacement: "\\mathring{$1}" },
+		{ pattern: /\\\\'\{([^}]+)\}/g, replacement: "\\acute{$1}" },
+		{ pattern: /\\\\`\{([^}]+)\}/g, replacement: "\\grave{$1}" },
+		{ pattern: /\\\\"\{([^}]+)\}/g, replacement: "\\ddot{$1}" },
+		{ pattern: /\\\\~\{([^}]+)\}/g, replacement: "\\tilde{$1}" },
+		{ pattern: /\\\\\^\{([^}]+)\}/g, replacement: "\\hat{$1}" },
+		{ pattern: /\\\\\.\{([^}]+)\}/g, replacement: "\\dot{$1}" },
+		{ pattern: /\\\\=\{([^}]+)\}/g, replacement: "\\bar{$1}" },
+		{ pattern: /\\\\b\{([^}]+)\}/g, replacement: "\\bar{$1}" },
+	];
+
+	let result = tex;
+	textModeAccents.forEach(({ pattern, replacement }) => {
+		result = result.replace(pattern, replacement);
+	});
+
+	return result;
 }
 
 /* -------------------------------------------------- */

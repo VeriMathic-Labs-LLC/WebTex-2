@@ -196,6 +196,49 @@ class LatexRenderer {
 	}
 
 	// Process basic LaTeX symbols
+	// Helper function to handle accents with Unicode combining characters
+	processAccent(accentType, content) {
+		// For single Latin characters, use Unicode combining accents
+		if (content.length === 1) {
+			const char = content.charCodeAt(0);
+			// Check if it's a basic Latin letter
+			if ((char >= 65 && char <= 90) || (char >= 97 && char <= 122)) {
+				const accentMap = {
+					hat: "\u0302", // Combining circumflex accent
+					tilde: "\u0303", // Combining tilde
+					acute: "\u0301", // Combining acute accent
+					grave: "\u0300", // Combining grave accent
+					breve: "\u0306", // Combining breve
+					check: "\u030C", // Combining caron
+					dot: "\u0307", // Combining dot above
+					ddot: "\u0308", // Combining diaeresis
+					mathring: "\u030A", // Combining ring above
+				};
+
+				if (accentMap[accentType]) {
+					return content + accentMap[accentType];
+				}
+			}
+		}
+
+		// Fallback to CSS styling for multi-character or unsupported accents
+		const styleMap = {
+			hat: "text-decoration: overline;",
+			tilde: "text-decoration: overline;",
+			bar: "text-decoration: overline;",
+			vec: "text-decoration: overline;",
+			acute: "text-decoration: underline;",
+			grave: "text-decoration: underline;",
+			breve: "text-decoration: overline;",
+			check: "text-decoration: overline;",
+			dot: "text-decoration: overline;",
+			ddot: "text-decoration: overline;",
+			mathring: "text-decoration: overline;",
+		};
+
+		return `<span style="${styleMap[accentType] || "text-decoration: overline;"}">${content}</span>`;
+	}
+
 	processBasicSymbols(html) {
 		try {
 			const conversions = [
@@ -332,22 +375,96 @@ class LatexRenderer {
 				{ pattern: /\\swarrow/g, replacement: "↙" },
 				{ pattern: /\\nwarrow/g, replacement: "↖" },
 
-				// Nuclear physics specific
+				// Nuclear physics specific - Improved accent handling
 				{
 					pattern: /\\bar\{([^}]+)\}/g,
-					replacement: '<span style="text-decoration: overline;">$1</span>',
+					replacement: (_match, content) => this.processAccent("bar", content),
 				},
 				{
 					pattern: /\\vec\{([^}]+)\}/g,
-					replacement: '<span style="text-decoration: overline;">$1</span>',
+					replacement: (_match, content) => this.processAccent("vec", content),
 				},
 				{
 					pattern: /\\hat\{([^}]+)\}/g,
-					replacement: '<span style="text-decoration: overline;">$1</span>',
+					replacement: (_match, content) => this.processAccent("hat", content),
 				},
 				{
 					pattern: /\\tilde\{([^}]+)\}/g,
-					replacement: '<span style="text-decoration: overline;">$1</span>',
+					replacement: (_match, content) => this.processAccent("tilde", content),
+				},
+				// Additional accent support
+				{
+					pattern: /\\acute\{([^}]+)\}/g,
+					replacement: (_match, content) => this.processAccent("acute", content),
+				},
+				{
+					pattern: /\\grave\{([^}]+)\}/g,
+					replacement: (_match, content) => this.processAccent("grave", content),
+				},
+				{
+					pattern: /\\breve\{([^}]+)\}/g,
+					replacement: (_match, content) => this.processAccent("breve", content),
+				},
+				{
+					pattern: /\\check\{([^}]+)\}/g,
+					replacement: (_match, content) => this.processAccent("check", content),
+				},
+				{
+					pattern: /\\dot\{([^}]+)\}/g,
+					replacement: (_match, content) => this.processAccent("dot", content),
+				},
+				{
+					pattern: /\\ddot\{([^}]+)\}/g,
+					replacement: (_match, content) => this.processAccent("ddot", content),
+				},
+				// Text mode accent commands (converted to math mode)
+				{
+					pattern: /\\u\{([^}]+)\}/g,
+					replacement: (_match, content) => this.processAccent("breve", content),
+				},
+				{
+					pattern: /\\v\{([^}]+)\}/g,
+					replacement: (_match, content) => this.processAccent("check", content),
+				},
+				{
+					pattern: /\\H\{([^}]+)\}/g,
+					replacement: (_match, content) => this.processAccent("ddot", content),
+				},
+				{
+					pattern: /\\k\{([^}]+)\}/g,
+					replacement: (_match, content) => this.processAccent("mathring", content),
+				},
+				{
+					pattern: /\\'\{([^}]+)\}/g,
+					replacement: (_match, content) => this.processAccent("acute", content),
+				},
+				{
+					pattern: /\\`\{([^}]+)\}/g,
+					replacement: (_match, content) => this.processAccent("grave", content),
+				},
+				{
+					pattern: /\\"\{([^}]+)\}/g,
+					replacement: (_match, content) => this.processAccent("ddot", content),
+				},
+				{
+					pattern: /\\~\{([^}]+)\}/g,
+					replacement: (_match, content) => this.processAccent("tilde", content),
+				},
+				{
+					pattern: /\\\^\{([^}]+)\}/g,
+					replacement: (_match, content) => this.processAccent("hat", content),
+				},
+				{
+					pattern: /\\\.\{([^}]+)\}/g,
+					replacement: (_match, content) => this.processAccent("dot", content),
+				},
+				{
+					pattern: /\\=\{([^}]+)\}/g,
+					replacement: (_match, content) => this.processAccent("bar", content),
+				},
+				{
+					pattern: /\\b\{([^}]+)\}/g,
+					replacement: (_match, content) => this.processAccent("bar", content),
 				},
 
 				// Units and measurements
