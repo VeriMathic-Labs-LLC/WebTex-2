@@ -130,6 +130,23 @@ input:checked + .slider:before {
 	color: #fff;
 }
 
+/* ---------- info section ---------- */
+.info {
+	margin: 12px 0;
+	padding: 10px;
+	background: rgba(255, 255, 255, 0.1);
+	border-radius: 8px;
+	border-left: 3px solid rgba(255, 255, 255, 0.3);
+}
+.help-text {
+	margin: 0;
+	line-height: 1.4;
+	opacity: 0.9;
+}
+.help-text small {
+	font-size: 11px;
+}
+
 /* ---------- footer links ---------- */
 nav {
 	margin-top: 16px;

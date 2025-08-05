@@ -1,6 +1,139 @@
 // WebTeX Consolidated Test Suite
 // This file combines all JavaScript test files into one comprehensive test suite
 
+// Mock domain utilities for testing (since we can't import ES modules in Node.js test environment)
+// In a real browser environment, these would be imported from the actual module
+
+// Common subdomains to strip when normalizing domains
+const COMMON_SUBDOMAINS = [
+	"www",
+	"m",
+	"mobile",
+	"app",
+	"api",
+	"cdn",
+	"static",
+	"assets",
+	"media",
+	"img",
+	"images",
+	"js",
+	"css",
+	"fonts",
+	"blog",
+	"forum",
+	"support",
+	"help",
+	"docs",
+	"dev",
+	"staging",
+	"test",
+	"beta",
+	"alpha",
+];
+
+function normalizeDomain(hostname) {
+	if (!hostname) return "";
+
+	if (hostname === "localhost" || /^\d+\.\d+\.\d+\.\d+$/.test(hostname)) {
+		return hostname;
+	}
+
+	const parts = hostname.split(".");
+
+	if (parts.length <= 2) {
+		return hostname;
+	}
+
+	const firstPart = parts[0].toLowerCase();
+	if (COMMON_SUBDOMAINS.includes(firstPart)) {
+		return parts.slice(1).join(".");
+	}
+
+	if (parts.length > 2) {
+		const tld = parts[parts.length - 1];
+		const countryTlds = [
+			"uk",
+			"au",
+			"nz",
+			"za",
+			"br",
+			"in",
+			"jp",
+			"kr",
+			"cn",
+			"ru",
+			"de",
+			"fr",
+			"it",
+			"es",
+			"nl",
+			"se",
+			"no",
+			"dk",
+			"fi",
+			"pl",
+			"cz",
+			"hu",
+			"ro",
+			"bg",
+			"hr",
+			"si",
+			"sk",
+			"ee",
+			"lv",
+			"lt",
+			"mt",
+			"cy",
+			"gr",
+			"pt",
+			"ie",
+			"be",
+			"at",
+			"ch",
+			"lu",
+			"li",
+			"mc",
+			"ad",
+			"sm",
+			"va",
+		];
+
+		if (countryTlds.includes(tld)) {
+			return parts.slice(-3).join(".");
+		}
+	}
+
+	return parts.slice(-2).join(".");
+}
+
+function domainMatches(hostname, normalizedDomain) {
+	if (!hostname || !normalizedDomain) return false;
+
+	if (hostname === normalizedDomain) return true;
+
+	if (hostname === "localhost" || /^\d+\.\d+\.\d+\.\d+$/.test(hostname)) {
+		return hostname === normalizedDomain;
+	}
+
+	// Check if it's a subdomain (must end with .domain)
+	return hostname.endsWith(`.${normalizedDomain}`);
+}
+
+function getDomainDisplayName(hostname) {
+	const normalized = normalizeDomain(hostname);
+
+	if (normalized === hostname) {
+		return hostname;
+	}
+
+	return `${normalized} (and subdomains)`;
+}
+
+function isDomainCovered(hostname, allowedDomains) {
+	return allowedDomains.some((domain) => domainMatches(hostname, domain));
+}
+
 console.log("=== WebTeX Consolidated Test Suite ===\n");
 
 // ============================================================================
@@ -1129,6 +1262,185 @@ function testWebtexProcessedClass() {
 	return failed === 0;
 }
 
+function testDomainMatching() {
+	console.log("Testing smart domain matching functionality...");
+
+	let passed = 0;
+	let failed = 0;
+
+	// Test normalizeDomain function
+	const normalizeTests = [
+		{ input: "www.example.com", expected: "example.com", description: "Strip www subdomain" },
+		{ input: "m.example.com", expected: "example.com", description: "Strip mobile subdomain" },
+		{ input: "blog.example.com", expected: "example.com", description: "Strip blog subdomain" },
+		{ input: "example.com", expected: "example.com", description: "Keep base domain unchanged" },
+		{ input: "localhost", expected: "localhost", description: "Keep localhost unchanged" },
+		{ input: "127.0.0.1", expected: "127.0.0.1", description: "Keep IP address unchanged" },
+		{
+			input: "example.co.uk",
+			expected: "example.co.uk",
+			description: "Keep country TLD unchanged",
+		},
+		{
+			input: "www.example.co.uk",
+			expected: "example.co.uk",
+			description: "Strip www from country TLD",
+		},
+		{ input: "api.example.com", expected: "example.com", description: "Strip api subdomain" },
+		{ input: "cdn.example.com", expected: "example.com", description: "Strip cdn subdomain" },
+	];
+
+	normalizeTests.forEach((test) => {
+		try {
+			const result = normalizeDomain(test.input);
+			if (result === test.expected) {
+				passed++;
+				console.log(`✅ ${test.description} - ${test.input} → ${result}`);
+			} else {
+				failed++;
+				console.log(`❌ ${test.description} - Expected ${test.expected}, got ${result}`);
+			}
+		} catch (error) {
+			failed++;
+			console.log(`❌ ${test.description} - Error: ${error.message}`);
+		}
+	});
+
+	// Test domainMatches function
+	const matchTests = [
+		{
+			hostname: "www.example.com",
+			domain: "example.com",
+			expected: true,
+			description: "www.example.com matches example.com",
+		},
+		{
+			hostname: "blog.example.com",
+			domain: "example.com",
+			expected: true,
+			description: "blog.example.com matches example.com",
+		},
+		{
+			hostname: "example.com",
+			domain: "example.com",
+			expected: true,
+			description: "example.com matches example.com",
+		},
+		{
+			hostname: "other.com",
+			domain: "example.com",
+			expected: false,
+			description: "other.com does not match example.com",
+		},
+		{
+			hostname: "localhost",
+			domain: "localhost",
+			expected: true,
+			description: "localhost matches localhost",
+		},
+		{
+			hostname: "127.0.0.1",
+			domain: "127.0.0.1",
+			expected: true,
+			description: "IP address matches itself",
+		},
+	];
+
+	matchTests.forEach((test) => {
+		try {
+			const result = domainMatches(test.hostname, test.domain);
+			if (result === test.expected) {
+				passed++;
+				console.log(`✅ ${test.description}`);
+			} else {
+				failed++;
+				console.log(`❌ ${test.description} - Expected ${test.expected}, got ${result}`);
+			}
+		} catch (error) {
+			failed++;
+			console.log(`❌ ${test.description} - Error: ${error.message}`);
+		}
+	});
+
+	// Test getDomainDisplayName function
+	const displayTests = [
+		{ input: "example.com", expected: "example.com", description: "Base domain shows as-is" },
+		{
+			input: "www.example.com",
+			expected: "example.com (and subdomains)",
+			description: "Subdomain shows normalized with note",
+		},
+		{
+			input: "blog.example.com",
+			expected: "example.com (and subdomains)",
+			description: "Subdomain shows normalized with note",
+		},
+	];
+
+	displayTests.forEach((test) => {
+		try {
+			const result = getDomainDisplayName(test.input);
+			if (result === test.expected) {
+				passed++;
+				console.log(`✅ ${test.description} - ${result}`);
+			} else {
+				failed++;
+				console.log(`❌ ${test.description} - Expected ${test.expected}, got ${result}`);
+			}
+		} catch (error) {
+			failed++;
+			console.log(`❌ ${test.description} - Error: ${error.message}`);
+		}
+	});
+
+	// Test isDomainCovered function
+	const coverageTests = [
+		{
+			hostname: "www.example.com",
+			allowedDomains: ["example.com"],
+			expected: true,
+			description: "www.example.com is covered by example.com",
+		},
+		{
+			hostname: "blog.example.com",
+			allowedDomains: ["example.com"],
+			expected: true,
+			description: "blog.example.com is covered by example.com",
+		},
+		{
+			hostname: "other.com",
+			allowedDomains: ["example.com"],
+			expected: false,
+			description: "other.com is not covered by example.com",
+		},
+		{
+			hostname: "example.com",
+			allowedDomains: ["www.example.com"],
+			expected: false,
+			description: "example.com is not covered by www.example.com",
+		},
+	];
+
+	coverageTests.forEach((test) => {
+		try {
+			const result = isDomainCovered(test.hostname, test.allowedDomains);
+			if (result === test.expected) {
+				passed++;
+				console.log(`✅ ${test.description}`);
+			} else {
+				failed++;
+				console.log(`❌ ${test.description} - Expected ${test.expected}, got ${result}`);
+			}
+		} catch (error) {
+			failed++;
+			console.log(`❌ ${test.description} - Error: ${error.message}`);
+		}
+	});
+
+	console.log(`\nDomain matching test results: ${passed} passed, ${failed} failed`);
+	return failed === 0;
+}
+
 // Run the test if this file is executed directly
 if (typeof window !== "undefined") {
 	// Browser environment
@@ -1137,6 +1449,7 @@ if (typeof window !== "undefined") {
 	window.testAsyncRenderingRaceCondition = testAsyncRenderingRaceCondition;
 	window.testCharacterDataObservation = testCharacterDataObservation;
 	window.testWebtexProcessedClass = testWebtexProcessedClass;
+	window.testDomainMatching = testDomainMatching;
 } else {
 	// Node.js environment
 	testRegexOrdering();
@@ -1146,6 +1459,7 @@ if (typeof window !== "undefined") {
 	});
 	testCharacterDataObservation();
 	testWebtexProcessedClass();
+	testDomainMatching();
 }
 
 // ============================================================================
@@ -1164,6 +1478,7 @@ function runAllTests() {
 	results.push({ name: "Empty Braces", passed: testEmptyBraces() });
 	results.push({ name: "Specific Issues", passed: testSpecificIssues() });
 	results.push({ name: "LaTeX Fixes", passed: testLatexFixes() });
+	results.push({ name: "Domain Matching", passed: testDomainMatching() });
 
 	// Summary
 	console.log("=== FINAL TEST SUMMARY ===");

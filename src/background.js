@@ -1,5 +1,7 @@
 /*  src/background.js  – compiled → build/background.js */
 
+import { domainMatches } from "./domain-utils.js";
+
 // Track which tabs have content scripts injected
 const injectedTabs = new Set();
 
@@ -24,7 +26,7 @@ chrome.tabs.onUpdated.addListener(async (tabId, changeInfo, tab) => {
 		// Check if this domain should have WebTeX enabled
 		const shouldInject =
 			url.protocol === "file:" ||
-			allowedDomains.includes(url.hostname) ||
+			allowedDomains.some((domain) => domainMatches(url.hostname, domain)) ||
 			url.pathname.includes("test-comprehensive.html") ||
 			url.pathname.includes("test-simple.html");
 
@@ -71,7 +73,7 @@ chrome.storage.onChanged.addListener(async (changes, namespace) => {
 				const url = new URL(tab.url);
 				const shouldInject =
 					url.protocol === "file:" ||
-					newAllowedDomains.includes(url.hostname) ||
+					newAllowedDomains.some((domain) => domainMatches(url.hostname, domain)) ||
 					url.pathname.includes("test-comprehensive.html") ||
 					url.pathname.includes("test-simple.html");
 
