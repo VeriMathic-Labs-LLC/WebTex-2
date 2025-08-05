@@ -923,15 +923,8 @@ async function renderMathExpression(tex, displayMode = false, element = null) {
 			.trim();
 	}
 
-	// Handle common LaTeX newline issues
-	// In display mode, \ or \newline do nothing, so we remove them to avoid warnings
-	if (isDisplayMath) {
-		cleanedTex = cleanedTex.replace(/\\\\(?:\s*\n?)?/g, " ");
-		cleanedTex = cleanedTex.replace(/\\newline(?:\s*\n?)?/g, " ");
-	} else {
-		// In inline mode, replace with actual line breaks
-		cleanedTex = cleanedTex.replace(/\\(?:newline|\\)\s*\n?/g, "\\\\");
-	}
+	// Removed problematic LaTeX newline handling that was breaking matrix row separators
+	// KaTeX can handle \\ commands properly on its own
 
 	// Pre-fix common malformed patterns before any processing
 	let prefixedTex = cleanedTex;
