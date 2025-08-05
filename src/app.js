@@ -1104,7 +1104,7 @@ function findMathExpressions(root) {
 			{ pattern: /\\\[([\s\S]*?)\\\]/g, display: true },
 			// Inline math: $...$ and \(...\) (handle escaped dollar signs)
 			{ pattern: /\$((?:[^\$]|\\\$)+?)\$/g, display: false },
-			{ pattern: /\\\(([\s\S]+?)\\\)/g, display: false },
+			{ pattern: /\\\(([\s\S]*?)\\\)/g, display: false },
 		];
 
 		patterns.forEach(({ pattern, display }) => {
