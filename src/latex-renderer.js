@@ -150,6 +150,13 @@ class LatexRenderer {
 			// Simple subscript with braces: _{Z}
 			html = html.replace(/_\{([^}]+)\}/g, "<sub>$1</sub>");
 
+			// --------------------------
+			// UPDATED REGEXES (handles multi-character subscripts/superscripts without braces)
+			// Handle cases like x^10, y_i
+			html = html.replace(/([A-Za-z0-9])\^([A-Za-z0-9]+)/g, "$1<sup>$2</sup>");
+			html = html.replace(/([A-Za-z0-9])_([A-Za-z0-9]+)/g, "$1<sub>$2</sub>");
+			// --------------------------
+
 			// Fractions with complex numerators/denominators
 			html = html.replace(/\\frac\{([^}]+)\}\{([^}]+)\}/g, (_match, num, den) => {
 				const processedNum = this.processBasicSymbols(num);
@@ -195,9 +202,9 @@ class LatexRenderer {
 			html = html.replace(/\^\{([^}]+)\}/g, "<sup>$1</sup>");
 			html = html.replace(/_\{([^}]+)\}/g, "<sub>$1</sub>");
 
-			// Handle simple cases like x^2, y_i (but be more careful)
-			html = html.replace(/([A-Za-z0-9])\^([A-Za-z0-9])/g, "$1<sup>$2</sup>");
-			html = html.replace(/([A-Za-z0-9])_([A-Za-z0-9])/g, "$1<sub>$2</sub>");
+			// UPDATED REGEXES HERE AS WELL (multi-character)
+			html = html.replace(/([A-Za-z0-9])\^([A-Za-z0-9]+)/g, "$1<sup>$2</sup>");
+			html = html.replace(/([A-Za-z0-9])_([A-Za-z0-9]+)/g, "$1<sub>$2</sub>");
 
 			return html;
 		} catch (error) {
@@ -512,18 +519,15 @@ class LatexRenderer {
 	splitByLatexPatterns(text) {
 		try {
 			const parts = [];
-			const _currentIndex = 0;
-
 			// Patterns to match: $...$, $$...$$, \(...\), \[...\]
 			const patterns = [
 				{ regex: /\$\$([^$]+)\$\$/g, type: "display" },
 				{ regex: /\$([^$]+)\$/g, type: "inline" },
-				{ regex: /\\\[([^\]]+)\\\]/g, type: "display" },
-				{ regex: /\\\(([^)]+)\\\)/g, type: "inline" },
+				{ regex: /\\\[[^\]]+\\\]/g, type: "display" },
+				{ regex: /\\\([^)]+\\\)/g, type: "inline" },
 			];
 
 			let lastIndex = 0;
-
 			// Find all matches
 			const matches = [];
 			patterns.forEach((pattern) => {
@@ -547,28 +551,18 @@ class LatexRenderer {
 			matches.forEach((match) => {
 				// Add text before match
 				if (match.index > lastIndex) {
-					parts.push({
-						type: "text",
-						content: text.substring(lastIndex, match.index),
-					});
+					parts.push({ type: "text", content: text.substring(lastIndex, match.index) });
 				}
 
 				// Add the LaTeX match
-				parts.push({
-					type: match.type,
-					content: match.content,
-					original: match.original,
-				});
+				parts.push({ type: match.type, content: match.content, original: match.original });
 
 				lastIndex = match.endIndex;
 			});
 
 			// Add remaining text
 			if (lastIndex < text.length) {
-				parts.push({
-					type: "text",
-					content: text.substring(lastIndex),
-				});
+				parts.push({ type: "text", content: text.substring(lastIndex) });
 			}
 
 			return parts;

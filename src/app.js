@@ -1267,6 +1267,9 @@ async function processMathExpressions(expressions) {
 		if (expr.node.parentNode) {
 			expr.node.parentNode.replaceChild(container, expr.node);
 			processedNodes.add(expr.node);
+
+			// Recursively process any remaining math in the newly created container (e.g., second $...$ in same text node)
+			await safeRender(container);
 		}
 	}
 }

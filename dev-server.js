@@ -51,5 +51,8 @@ process.on("uncaughtException", (err) => {
 // Handle unhandled promise rejections
 process.on("unhandledRejection", (reason, promise) => {
 	console.error("Unhandled Rejection at:", promise, "reason:", reason);
-	process.exit(1);
+	// In development keep the server alive; only crash in production builds
+	if (process.env.NODE_ENV === "production") {
+		process.exit(1);
+	}
 });
