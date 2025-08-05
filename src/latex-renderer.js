@@ -89,7 +89,7 @@ class LatexRenderer {
 	processComplexExpressions(html) {
 		try {
 			// Nuclear physics notation with text commands - handle these first
-			// Pattern: \text{_Z^A X} -> <span>Z<sup>A</sup>X</span>
+			// Pattern: \text{_Z^A X} -> <span><sub>Z</sub><sup>A</sup>X</span>
 			html = html.replace(
 				/\\text\{_([^}]+)\^([^}]+)\s+([^}]+)\}/g,
 				'<span style="font-style: normal;"><sub>$1</sub><sup>$2</sup>$3</span>',
@@ -101,27 +101,9 @@ class LatexRenderer {
 				'<span style="font-style: normal;">$1<sup>$2</sup>$3</span>',
 			);
 
-			// Pattern: \text{_Z^A N} -> <span><sub>Z</sub><sup>A</sup>N</span>
-			html = html.replace(
-				/\\text\{_([^}]+)\^([^}]+)\s+([^}]+)\}/g,
-				'<span style="font-style: normal;"><sub>$1</sub><sup>$2</sup>$3</span>',
-			);
-
 			// Pattern: \text{{Z-2}^{A-4} N'} -> <span><sub>Z-2</sub><sup>A-4</sup>N'</span>
 			html = html.replace(
 				/\\text\{\{([^}]+)\}\^\{([^}]+)\}\s+([^}]+)\}/g,
-				'<span style="font-style: normal;"><sub>$1</sub><sup>$2</sup>$3</span>',
-			);
-
-			// Pattern: \text{{Z+1}^{A} N'} -> <span><sub>Z+1</sub><sup>A</sup>N'</span>
-			html = html.replace(
-				/\\text\{\{([^}]+)\}\^\{([^}]+)\}\s+([^}]+)\}/g,
-				'<span style="font-style: normal;"><sub>$1</sub><sup>$2</sup>$3</span>',
-			);
-
-			// Pattern: \text{_Z^A N*} -> <span><sub>Z</sub><sup>A</sup>N*</span>
-			html = html.replace(
-				/\\text\{_([^}]+)\^([^}]+)\s+([^}]+)\}/g,
 				'<span style="font-style: normal;"><sub>$1</sub><sup>$2</sup>$3</span>',
 			);
 
@@ -288,13 +270,13 @@ class LatexRenderer {
 				{ pattern: /\\forall/g, replacement: "∀" },
 				{ pattern: /\\exists/g, replacement: "∃" },
 				{ pattern: /\\nexists/g, replacement: "∄" },
-				{ pattern: /\\in/g, replacement: "∈" },
 				{ pattern: /\\notin/g, replacement: "∉" },
+				{ pattern: /\\in/g, replacement: "∈" },
 				{ pattern: /\\ni/g, replacement: "∋" },
-				{ pattern: /\\subset/g, replacement: "⊂" },
-				{ pattern: /\\supset/g, replacement: "⊃" },
 				{ pattern: /\\subseteq/g, replacement: "⊆" },
 				{ pattern: /\\supseteq/g, replacement: "⊇" },
+				{ pattern: /\\subset/g, replacement: "⊂" },
+				{ pattern: /\\supset/g, replacement: "⊃" },
 				{ pattern: /\\cup/g, replacement: "∪" },
 				{ pattern: /\\cap/g, replacement: "∩" },
 				{ pattern: /\\emptyset/g, replacement: "∅" },
@@ -324,12 +306,12 @@ class LatexRenderer {
 				{ pattern: /\\rfloor/g, replacement: "⌋" },
 
 				// Arrows
+				{ pattern: /\\leftrightarrow/g, replacement: "↔" },
 				{ pattern: /\\leftarrow/g, replacement: "←" },
 				{ pattern: /\\rightarrow/g, replacement: "→" },
-				{ pattern: /\\leftrightarrow/g, replacement: "↔" },
+				{ pattern: /\\Leftrightarrow/g, replacement: "⇔" },
 				{ pattern: /\\Leftarrow/g, replacement: "⇐" },
 				{ pattern: /\\Rightarrow/g, replacement: "⇒" },
-				{ pattern: /\\Leftrightarrow/g, replacement: "⇔" },
 				{ pattern: /\\mapsto/g, replacement: "↦" },
 				{ pattern: /\\hookleftarrow/g, replacement: "↩" },
 				{ pattern: /\\hookrightarrow/g, replacement: "↪" },
@@ -339,12 +321,12 @@ class LatexRenderer {
 				{ pattern: /\\rightharpoondown/g, replacement: "⇁" },
 				{ pattern: /\\rightleftharpoons/g, replacement: "⇌" },
 				{ pattern: /\\leftrightharpoons/g, replacement: "⇋" },
+				{ pattern: /\\updownarrow/g, replacement: "↕" },
 				{ pattern: /\\uparrow/g, replacement: "↑" },
 				{ pattern: /\\downarrow/g, replacement: "↓" },
-				{ pattern: /\\updownarrow/g, replacement: "↕" },
+				{ pattern: /\\Updownarrow/g, replacement: "⇕" },
 				{ pattern: /\\Uparrow/g, replacement: "⇑" },
 				{ pattern: /\\Downarrow/g, replacement: "⇓" },
-				{ pattern: /\\Updownarrow/g, replacement: "⇕" },
 				{ pattern: /\\nearrow/g, replacement: "↗" },
 				{ pattern: /\\searrow/g, replacement: "↘" },
 				{ pattern: /\\swarrow/g, replacement: "↙" },

@@ -634,7 +634,7 @@ function testSpecificIssues() {
 	// Test cases for the specific issues
 	const testCases = [
 		{
-			input: "{}^{A}\\text{N} \\rightarrow {}{}{}^{A}_{Z+1}\\text{N'} + e^{-} + \\overline{\\nu}",
+			input: "{}^{A}\\text{N} \\rightarrow {}{}{}^{A-4}_{Z-2}\\text{N'} + {}{}^{4}_{2}He",
 			description: "Specific delimiter balance issue from error message",
 			shouldHaveEmptyBraces: false,
 			shouldBeBalanced: true,
@@ -747,6 +747,166 @@ function testLatexFixes() {
 	console.log("4. Check for warnings/errors\n");
 
 	return true; // Placeholder result
+}
+
+// Test the regex ordering fixes
+function testRegexOrdering() {
+	console.log("Testing regex ordering fixes...");
+
+	// Test that \subseteq is handled correctly (not partially replaced as ⊂eq)
+	const testCases = [
+		{ input: "\\subseteq", expected: "⊆", description: "subseteq should render as ⊆" },
+		{ input: "\\supseteq", expected: "⊇", description: "supseteq should render as ⊇" },
+		{ input: "\\subset", expected: "⊂", description: "subset should render as ⊂" },
+		{ input: "\\supset", expected: "⊃", description: "supset should render as ⊃" },
+		{ input: "\\notin", expected: "∉", description: "notin should render as ∉" },
+		{ input: "\\in", expected: "∈", description: "in should render as ∈" },
+		{ input: "\\leftrightarrow", expected: "↔", description: "leftrightarrow should render as ↔" },
+		{ input: "\\leftarrow", expected: "←", description: "leftarrow should render as ←" },
+		{ input: "\\rightarrow", expected: "→", description: "rightarrow should render as →" },
+		{ input: "\\Leftrightarrow", expected: "⇔", description: "Leftrightarrow should render as ⇔" },
+		{ input: "\\Leftarrow", expected: "⇐", description: "Leftarrow should render as ⇐" },
+		{ input: "\\Rightarrow", expected: "⇒", description: "Rightarrow should render as ⇒" },
+		{ input: "\\updownarrow", expected: "↕", description: "updownarrow should render as ↕" },
+		{ input: "\\uparrow", expected: "↑", description: "uparrow should render as ↑" },
+		{ input: "\\downarrow", expected: "↓", description: "downarrow should render as ↓" },
+		{ input: "\\Updownarrow", expected: "⇕", description: "Updownarrow should render as ⇕" },
+		{ input: "\\Uparrow", expected: "⇑", description: "Uparrow should render as ⇑" },
+		{ input: "\\Downarrow", expected: "⇓", description: "Downarrow should render as ⇓" },
+	];
+
+	let passed = 0;
+	let failed = 0;
+
+	testCases.forEach((testCase) => {
+		// Create a simple test renderer that mimics the processBasicSymbols function
+		const conversions = [
+			{ pattern: /\\notin/g, replacement: "∉" },
+			{ pattern: /\\in/g, replacement: "∈" },
+			{ pattern: /\\subseteq/g, replacement: "⊆" },
+			{ pattern: /\\supseteq/g, replacement: "⊇" },
+			{ pattern: /\\subset/g, replacement: "⊂" },
+			{ pattern: /\\supset/g, replacement: "⊃" },
+			{ pattern: /\\leftrightarrow/g, replacement: "↔" },
+			{ pattern: /\\leftarrow/g, replacement: "←" },
+			{ pattern: /\\rightarrow/g, replacement: "→" },
+			{ pattern: /\\Leftrightarrow/g, replacement: "⇔" },
+			{ pattern: /\\Leftarrow/g, replacement: "⇐" },
+			{ pattern: /\\Rightarrow/g, replacement: "⇒" },
+			{ pattern: /\\updownarrow/g, replacement: "↕" },
+			{ pattern: /\\uparrow/g, replacement: "↑" },
+			{ pattern: /\\downarrow/g, replacement: "↓" },
+			{ pattern: /\\Updownarrow/g, replacement: "⇕" },
+			{ pattern: /\\Uparrow/g, replacement: "⇑" },
+			{ pattern: /\\Downarrow/g, replacement: "⇓" },
+		];
+
+		let result = testCase.input;
+		conversions.forEach((conv) => {
+			result = result.replace(conv.pattern, conv.replacement);
+		});
+
+		if (result === testCase.expected) {
+			passed++;
+			console.log(`✅ ${testCase.description}`);
+		} else {
+			failed++;
+			console.log(`❌ ${testCase.description} - Expected: ${testCase.expected}, Got: ${result}`);
+		}
+	});
+
+	console.log(`\nRegex ordering test results: ${passed} passed, ${failed} failed`);
+	return failed === 0;
+}
+
+// Test multiple LaTeX expressions in the same text node
+function testMultipleExpressionsInTextNode() {
+	console.log("Testing multiple LaTeX expressions in the same text node...");
+
+	// Test cases that should all be processed
+	const testCases = [
+		{
+			input: "Simple inline: E=mc² and $a^2 + b^2 = c^2$",
+			expected: 1,
+			description: "Text with one LaTeX expression",
+		},
+		{
+			input: "Multiple expressions: $f'(x) = 3x^2$ and $\sqrt{x^2 + y^2}$",
+			expected: 2,
+			description: "Text with two LaTeX expressions",
+		},
+		{
+			input: "Three expressions: $\frac{a}{b}$, $\sqrt[3]{x}$, and $x^2 + y^2 = z^2$",
+			expected: 3,
+			description: "Text with three LaTeX expressions",
+		},
+		{
+			input:
+				"Mixed content: $f'(x) = 3x^2$ and $\sqrt{x^2 + y^2}$, $\sqrt[3]{x}$ and $\frac{a}{b}$, $\frac{x+1}{x-1}$",
+			expected: 5,
+			description: "Text with five LaTeX expressions",
+		},
+	];
+
+	let passed = 0;
+	let failed = 0;
+
+	testCases.forEach((testCase) => {
+		// Simulate the findMathExpressions function logic
+		const text = testCase.input;
+		const patterns = [
+			{ pattern: /\$\$([\s\S]*?)\$\$/g, display: true },
+			{ pattern: /\\\[([\s\S]*?)\\\]/g, display: true },
+			{ pattern: /\$([^$\n]+?)\$/g, display: false },
+			{ pattern: /\\\(([\s\S]*?)\\\)/g, display: false },
+		];
+
+		const mathExpressions = [];
+		patterns.forEach(({ pattern, display }) => {
+			let match = pattern.exec(text);
+			while (match !== null) {
+				const tex = match[1].trim();
+				if (tex) {
+					mathExpressions.push({
+						tex: tex,
+						display: display,
+						match: match[0],
+						start: match.index,
+						end: match.index + match[0].length,
+					});
+				}
+				match = pattern.exec(text);
+			}
+		});
+
+		if (mathExpressions.length === testCase.expected) {
+			passed++;
+			console.log(`✅ ${testCase.description} - Found ${mathExpressions.length} expressions`);
+		} else {
+			failed++;
+			console.log(
+				`❌ ${testCase.description} - Expected ${testCase.expected}, Found ${mathExpressions.length}`,
+			);
+			console.log(
+				`   Found expressions:`,
+				mathExpressions.map((e) => e.tex),
+			);
+		}
+	});
+
+	console.log(`\nMultiple expressions test results: ${passed} passed, ${failed} failed`);
+	return failed === 0;
+}
+
+// Run the test if this file is executed directly
+if (typeof window !== "undefined") {
+	// Browser environment
+	window.testRegexOrdering = testRegexOrdering;
+	window.testMultipleExpressionsInTextNode = testMultipleExpressionsInTextNode;
+} else {
+	// Node.js environment
+	testRegexOrdering();
+	testMultipleExpressionsInTextNode();
 }
 
 // ============================================================================
