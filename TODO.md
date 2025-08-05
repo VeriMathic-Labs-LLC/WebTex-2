@@ -44,9 +44,7 @@
 
 
 
-Unbalanced-brace “fix” can corrupt nesting
-cleanupMalformedLatex
- simply counts {/} and appends } at end. For deeply nested or interleaved {} this can produce invalid structure instead of surfacing the error.
+
 Regex‐heavy conversions on every render
 processComplexExpressions
  + 

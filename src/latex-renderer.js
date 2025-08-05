@@ -60,33 +60,23 @@ class LatexRenderer {
 
 	// Clean up malformed LaTeX expressions
 	cleanupMalformedLatex(html) {
-		// Remove unmatched braces
-		let braceCount = 0;
-		let cleaned = "";
-
+		// Ensure balanced braces, else surface error
+		let balance = 0;
 		for (let i = 0; i < html.length; i++) {
 			const char = html[i];
 			if (char === "{") {
-				braceCount++;
-				cleaned += char;
+				balance++;
 			} else if (char === "}") {
-				if (braceCount > 0) {
-					braceCount--;
-					cleaned += char;
+				balance--;
+				if (balance < 0) {
+					throw new Error("Unmatched closing brace in LaTeX input");
 				}
-				// Skip unmatched closing braces
-			} else {
-				cleaned += char;
 			}
 		}
-
-		// Add missing closing braces
-		while (braceCount > 0) {
-			cleaned += "}";
-			braceCount--;
+		if (balance > 0) {
+			throw new Error("Missing closing brace(s) in LaTeX input");
 		}
-
-		return cleaned;
+		return html;
 	}
 
 	// Process complex LaTeX expressions
