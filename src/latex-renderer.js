@@ -622,8 +622,8 @@ class LatexRenderer {
 			const patterns = [
 				{ regex: /\$\$([^$]+)\$\$/g, type: "display" },
 				{ regex: /\$([^$]+)\$/g, type: "inline" },
-				{ regex: /\\\[[^\]]+\\\]/g, type: "display" },
-				{ regex: /\\\([^)]+\\\)/g, type: "inline" },
+				{ regex: /\\\[([\s\S]+?)\\\]/g, type: "display" },
+				{ regex: /\\\(([\s\S]+?)\\\)/g, type: "inline" },
 			];
 
 			let lastIndex = 0;
