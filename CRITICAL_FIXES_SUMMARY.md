@@ -45,7 +45,6 @@ function decodeHTMLEntities(text) {
     const doc = parser.parseFromString(text, 'text/html');
     return doc.body.textContent || "";
 }
-Handles edge cases that manual replacement missed.
 
 **File**: `src/app.js` lines 283-289
 
