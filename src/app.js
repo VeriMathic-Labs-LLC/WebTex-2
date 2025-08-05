@@ -498,12 +498,6 @@ class CustomLatexParser {
 		];
 	}
 
-	// Check if expression can be handled by custom parser
-	canHandle(_tex) {
-		// Always try the custom parser for ANY expression
-		return true;
-	}
-
 	// Convert to simplified LaTeX that KaTeX can handle
 	simplify(tex) {
 		// Remove stray leading/trailing $ around environments (e.g. "$\\begin{pmatrix}")
@@ -1012,9 +1006,7 @@ async function renderMathExpression(tex, displayMode = false, element = null) {
 		processedTex = cleanupEmptyBraces(processedTex);
 
 		// Simplify complex structures for KaTeX
-		if (customParser.canHandle(processedTex)) {
-			processedTex = customParser.simplify(processedTex);
-		}
+		processedTex = customParser.simplify(processedTex);
 
 		// Handle Unicode characters
 		processedTex = handleUnicodeInMath(processedTex);
@@ -1169,7 +1161,6 @@ async function processMathExpressions(expressions) {
 		} else {
 			// Keep original text if all renderers failed
 			const textNode = document.createTextNode(expr.match);
-			textNode.dataset = { originalText: expr.match };
 			container.appendChild(textNode);
 			// Mark container as processed to prevent infinite loop on failed renders
 			container.classList.add("webtex-processed", "webtex-failed-render");
@@ -1319,36 +1310,16 @@ async function safeRender(root = document.body) {
 (async function main() {
 	log(LOG_LEVEL.INFO, "WebTeX extension initializing...");
 
-	const { allowedDomains = [] } = await chrome.storage.local.get("allowedDomains");
+	// Since this script is only injected on allowed domains, we can enable immediately
+	isEnabled = true;
+	await enableRendering();
 
-	const isLocalFile = location.protocol === "file:";
-	const isDomainAllowed = allowedDomains.includes(location.hostname);
-	const isTestFile = location.pathname.includes("test-comprehensive.html");
-
-	// Enable on local files, allowed domains, or test files
-	isEnabled =
-		isLocalFile || isDomainAllowed || isTestFile || location.pathname.includes("test-simple.html");
-
-	if (isEnabled) {
-		await enableRendering();
-	}
-
-	// Listen for domain updates with better response handling
+	// Listen for disable messages from background script
 	chrome.runtime.onMessage.addListener(async (msg, _sender, sendResponse) => {
-		if (msg.action === "domain-updated" && msg.allowed) {
-			const newIsEnabled = location.protocol === "file:" || msg.allowed.includes(location.hostname);
-
-			if (newIsEnabled && !isEnabled) {
-				isEnabled = true;
-				await enableRendering();
-				setupNavigationHandlers();
-			} else if (!newIsEnabled && isEnabled) {
-				isEnabled = false;
-				disableRendering();
-			}
-
-			// Always send response
-			sendResponse({ success: true, enabled: isEnabled });
+		if (msg.action === "disable-website") {
+			isEnabled = false;
+			disableRendering();
+			sendResponse({ success: true, enabled: false });
 		}
 
 		return true; // Keep message channel open for async response

@@ -5,7 +5,7 @@ const siteToggle = $("siteToggle");
 const siteStatus = $("siteStatus");
 const domainSpan = $("domainName");
 
-let currentTab, host;
+let host;
 
 // Add visual feedback for toggle actions
 function showToggleStatus(message, isSuccess = true) {
@@ -25,8 +25,6 @@ function showToggleStatus(message, isSuccess = true) {
 
 /* ---------- init ---------- */
 chrome.tabs.query({ active: true, currentWindow: true }).then(async ([tab]) => {
-	currentTab = tab;
-
 	// Handle special URLs (chrome://, about:, etc.) that can't be parsed
 	try {
 		const url = new URL(tab.url);
@@ -56,42 +54,9 @@ siteToggle.onchange = async () => {
 		const action = siteToggle.checked ? "enabled" : "disabled";
 		showToggleStatus(`WebTeX ${action} for ${host}`);
 
-		// tell content script on this tab to reload to apply changes
-		if (currentTab?.id) {
-			try {
-				const response = await chrome.tabs.sendMessage(currentTab.id, {
-					action: "domain-updated",
-					allowed: list,
-				});
-				if (response?.success) {
-					showToggleStatus(`WebTeX ${action} successfully`);
-				}
-			} catch (_e) {
-				// Content script might not be loaded on this page
-				showToggleStatus("Injecting WebTeX content script...", true);
-
-				// Try to inject the content script if it's not loaded
-				try {
-					await chrome.scripting.executeScript({
-						target: { tabId: currentTab.id },
-						files: ["app.js"],
-					});
-
-					// Try sending the message again
-					setTimeout(async () => {
-						try {
-							const _response = await chrome.tabs.sendMessage(currentTab.id, {
-								action: "domain-updated",
-								allowed: list,
-							});
-							showToggleStatus(`WebTeX ${action} after injection`);
-						} catch (_e2) {
-							showToggleStatus("WebTeX injection failed - try refreshing the page", false);
-						}
-					}, 100);
-				} catch (_injectionError) {}
-			}
-		}
+		// The background script will automatically handle content script injection/removal
+		// based on the updated allowed domains list
+		showToggleStatus(`WebTeX ${action} - changes will apply to new page loads`);
 	} catch (_error) {}
 };
 
