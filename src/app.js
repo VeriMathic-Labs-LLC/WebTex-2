@@ -1084,8 +1084,7 @@ function findMathExpressions(root) {
 			// Skip if parent is already processed or should be ignored
 			if (
 				node.parentElement &&
-				(node.parentElement.classList.contains("webtex-processed") ||
-					node.parentElement.classList.contains("webtex-ignore") ||
+				(node.parentElement.classList.contains("webtex-ignore") ||
 					node.parentElement.closest(".webtex-ignore") ||
 					// Only skip math containers that contain failed renders to prevent infinite loops
 					(node.parentElement.classList.contains("webtex-math-container") &&

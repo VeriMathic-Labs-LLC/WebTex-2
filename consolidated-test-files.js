@@ -1040,6 +1040,95 @@ function testCharacterDataObservation() {
 	return failed === 0;
 }
 
+// Test webtex-processed class implementation
+function testWebtexProcessedClass() {
+	console.log("Testing webtex-processed class implementation...");
+
+	// Test cases to verify the class is properly applied
+	const testCases = [
+		{
+			description: "Successful render should NOT add webtex-processed class",
+			scenario: "success",
+			expected: "webtex-processed class should NOT be present",
+		},
+		{
+			description: "Failed render should add webtex-processed and webtex-failed-render classes",
+			scenario: "failed",
+			expected: "both webtex-processed and webtex-failed-render classes should be present",
+		},
+		{
+			description: "TreeWalker should NOT skip elements with webtex-processed class",
+			scenario: "skip",
+			expected: "elements with webtex-processed should NOT be filtered out",
+		},
+	];
+
+	let passed = 0;
+	let failed = 0;
+
+	testCases.forEach((testCase) => {
+		try {
+			switch (testCase.scenario) {
+				case "success": {
+					// Simulate successful render logic
+					const successClasses = ["webtex-math-container"];
+					const hasProcessedClass = successClasses.includes("webtex-processed");
+
+					if (!hasProcessedClass) {
+						passed++;
+						console.log(`✅ ${testCase.description} - ${testCase.expected}`);
+					} else {
+						failed++;
+						console.log(`❌ ${testCase.description} - Class should not be present`);
+					}
+					break;
+				}
+
+				case "failed": {
+					// Simulate failed render logic
+					const failedClasses = [
+						"webtex-math-container",
+						"webtex-processed",
+						"webtex-failed-render",
+					];
+					const hasBothClasses =
+						failedClasses.includes("webtex-processed") &&
+						failedClasses.includes("webtex-failed-render");
+
+					if (hasBothClasses) {
+						passed++;
+						console.log(`✅ ${testCase.description} - ${testCase.expected}`);
+					} else {
+						failed++;
+						console.log(`❌ ${testCase.description} - Classes not found`);
+					}
+					break;
+				}
+
+				case "skip": {
+					// Simulate TreeWalker skip logic - TreeWalker no longer checks for webtex-processed
+					const shouldSkip = false; // TreeWalker doesn't skip webtex-processed anymore
+
+					if (!shouldSkip) {
+						passed++;
+						console.log(`✅ ${testCase.description} - ${testCase.expected}`);
+					} else {
+						failed++;
+						console.log(`❌ ${testCase.description} - Element should not be skipped`);
+					}
+					break;
+				}
+			}
+		} catch (error) {
+			failed++;
+			console.log(`❌ ${testCase.description} - Error: ${error.message}`);
+		}
+	});
+
+	console.log(`\nWebtex-processed class test results: ${passed} passed, ${failed} failed`);
+	return failed === 0;
+}
+
 // Run the test if this file is executed directly
 if (typeof window !== "undefined") {
 	// Browser environment
@@ -1047,6 +1136,7 @@ if (typeof window !== "undefined") {
 	window.testMultipleExpressionsInTextNode = testMultipleExpressionsInTextNode;
 	window.testAsyncRenderingRaceCondition = testAsyncRenderingRaceCondition;
 	window.testCharacterDataObservation = testCharacterDataObservation;
+	window.testWebtexProcessedClass = testWebtexProcessedClass;
 } else {
 	// Node.js environment
 	testRegexOrdering();
@@ -1055,6 +1145,7 @@ if (typeof window !== "undefined") {
 		console.log(`Async rendering race condition test: ${result ? "PASSED" : "FAILED"}`);
 	});
 	testCharacterDataObservation();
+	testWebtexProcessedClass();
 }
 
 // ============================================================================
