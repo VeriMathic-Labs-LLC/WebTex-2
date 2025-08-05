@@ -961,6 +961,8 @@ class CustomLatexParser {
       border-radius: 3px;
       border: 1px solid rgba(239, 154, 154, 0.5);
     `;
+		// Use textContent for security - this is the ultimate fallback that displays raw LaTeX text
+		// when all rendering attempts fail. Using textContent prevents XSS attacks from malicious LaTeX content.
 		container.textContent = tex;
 		return container;
 	}
@@ -1058,7 +1060,7 @@ async function renderMathExpression(tex, displayMode = false, element = null) {
 				return { success: true, method: "custom-fallback", element };
 			}
 		} catch (fallbackError) {
-			log(LOG_LEVEL.ERROR, "The custom HTML fallback renderer also failed:", fallbackError);
+			log(LOG_LEVEL.ERROR, "The custom text fallback renderer also failed:", fallbackError);
 		}
 
 		// Ultimate fallback: display the original text to prevent script crash.
