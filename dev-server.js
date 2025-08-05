@@ -3,7 +3,7 @@ const path = require("node:path");
 const webpack = require("webpack");
 const webpackDevMiddleware = require("webpack-dev-middleware");
 const config = require("./config/webpack.config.js");
-const opn = require('opn');
+const open = require("open");
 
 const app = express();
 const PORT = process.env.PORT || 3000;
@@ -36,7 +36,7 @@ app.listen(PORT, () => {
 
 	// Open the default browser to the app
 	if (process.env.OPEN_BROWSER !== "false") {
-		opn(url).catch(() => {
+		open(url).catch(() => {
 			console.log("Unable to open browser. Please visit:", url);
 		});
 	}
