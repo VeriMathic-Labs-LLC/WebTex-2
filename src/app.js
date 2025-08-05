@@ -961,11 +961,11 @@ class CustomLatexParser {
 const customParser = new CustomLatexParser();
 
 /* -------------------------------------------------- */
-// Enhanced rendering function with better error handling and fallback logic
+// In src/app.js, replace the whole function
+
 async function renderMathExpression(tex, displayMode = false, element = null) {
 	rendererState.totalAttempts++;
 
-	// Skip empty or whitespace-only input
 	if (!tex || !tex.trim()) {
 		if (element) {
 			element.textContent = tex || "";
@@ -973,19 +973,12 @@ async function renderMathExpression(tex, displayMode = false, element = null) {
 		return { success: false, method: "empty", element };
 	}
 
-	// Clean up the input
 	let cleanedTex = tex.trim();
-
-	// Clean up multiple consecutive empty braces that cause delimiter balance issues
-	cleanedTex = cleanupEmptyBraces(cleanedTex);
-
-	// Handle display mode delimiters
 	const isDisplayMath =
 		displayMode ||
 		(cleanedTex.startsWith("$$") && cleanedTex.endsWith("$$")) ||
 		(cleanedTex.startsWith("\\[") && cleanedTex.endsWith("\\]"));
 
-	// Remove delimiters for processing
 	if (isDisplayMath) {
 		cleanedTex = cleanedTex
 			.replace(/^\$\$|\$\$$/g, "")
@@ -993,119 +986,31 @@ async function renderMathExpression(tex, displayMode = false, element = null) {
 			.trim();
 	}
 
-	// Removed problematic LaTeX newline handling that was breaking matrix row separators
-	// KaTeX can handle \\ commands properly on its own
+	// This variable will be used in both try and catch blocks
+	let processedTex = cleanedTex;
 
-	// Pre-fix common malformed patterns before any processing
-	let prefixedTex = cleanedTex;
-
-	// Debug: log expressions that match our problematic patterns
-	if (prefixedTex.includes("\\text") && !prefixedTex.includes("\\text{")) {
-		log(LOG_LEVEL.INFO, "[WebTeX Debug] Fixing incomplete \\text command in:", prefixedTex);
-	}
-	if (prefixedTex.match(/\\int_\{[^}]+\}\^(?!\{)/)) {
-		log(LOG_LEVEL.INFO, "[WebTeX Debug] Fixing malformed integral in:", prefixedTex);
-	}
-
-	// Apply shared fixes for incomplete commands and malformed integrals
-	prefixedTex = fixIncompleteCommands(prefixedTex);
-
-	// Debug: log the result after fixes
-	if (cleanedTex !== prefixedTex) {
-		log(LOG_LEVEL.INFO, "[WebTeX Debug] Fixed expression from:", cleanedTex, "to:", prefixedTex);
-	}
-
-	// Fix unmatched braces before checking balance
-	if (customParser && typeof customParser.fixUnmatchedBraces === "function") {
-		prefixedTex = customParser.fixUnmatchedBraces(prefixedTex);
-		prefixedTex = cleanupEmptyBraces(prefixedTex);
-	}
-
-	// Delimiter balance issues will now be handled by KaTeX itself; we defer checks
-	// until after an initial KaTeX parse attempt to minimise false positives.
-
-	// Try KaTeX first with the original text
 	try {
-		// Preprocess with custom parser
-		let processedTex = prefixedTex;
-		if (customParser.canHandle(prefixedTex)) {
-			try {
-				processedTex = customParser.simplify(prefixedTex);
-			} catch (simplifyError) {
-				log(LOG_LEVEL.WARN, "Error in custom parser simplification:", simplifyError);
-				// Continue with original text if simplification fails
-			}
+		// Pre-fix common issues before attempting to render
+		processedTex = fixIncompleteCommands(processedTex);
+		processedTex = customParser.fixUnmatchedBraces(processedTex);
+		processedTex = cleanupEmptyBraces(processedTex);
+
+		// Simplify complex structures for KaTeX
+		if (customParser.canHandle(processedTex)) {
+			processedTex = customParser.simplify(processedTex);
 		}
 
 		// Handle Unicode characters
 		processedTex = handleUnicodeInMath(processedTex);
 
-		// Configure KaTeX options
 		const katexOptions = {
 			displayMode: isDisplayMath,
 			errorColor: "inherit",
-			strict: (errorCode) => {
-				// Handle specific error codes to reduce warnings
-				if (errorCode === "newLineInDisplayMode") {
-					// In display mode, newlines are ignored, so we can safely ignore this warning
-					return "ignore";
-				}
-				// For other errors, warn but continue
-				return "warn";
-			},
-			trust: (context) => {
-				// Allow common commands that need trust
-				const trustedCommands = [
-					"\\href",
-					"\\url",
-					"\\includegraphics",
-					"\\htmlId",
-					"\\htmlClass",
-					"\\htmlData",
-					"\\htmlStyle",
-					"\\class",
-					"\\id",
-					"\\data",
-					"\\style",
-				];
-				if (trustedCommands.includes(context.command)) {
-					return true;
-				}
-				// Allow specific protocols in URLs
-				if (["href", "url", "includegraphics"].includes(context.command)) {
-					const safeProtocols = ["http", "https", "data", "mailto", "ftp"];
-					return safeProtocols.some((proto) => context.url.startsWith(proto));
-				}
-				return false;
-			},
-			macros: {
-				"\\RR": "\\mathbb{R}",
-				"\\NN": "\\mathbb{N}",
-				"\\ZZ": "\\mathbb{Z}",
-				"\\QQ": "\\mathbb{Q}",
-				"\\CC": "\\mathbb{C}",
-				"\\half": "\\frac{1}{2}",
-				"\\quarter": "\\frac{1}{4}",
-				"\\third": "\\frac{1}{3}",
-				"\\twothirds": "\\frac{2}{3}",
-				"\\threequarters": "\\frac{3}{4}",
-				"\\to": "\\rightarrow",
-				"\\rac": "\\frac",
-				"\\qed": "\\quad \\blacksquare",
-				"\\abs": "\\left|#1\\right|",
-				"\\norm": "\\left\\|#1\\right\\|",
-				"\\set": "\\left\\{#1\\right\\}",
-				"\\paren": "\\left(#1\\right)",
-				"\\brack": "\\left[#1\\right]",
-				"\\eval": "\\left.#1\\right|_{#2}",
-			},
-			maxSize: 1000,
-			maxExpand: 1000,
-			maxCharacterCount: 10000,
-			throwOnError: true,
+			strict: "warn",
+			trust: false,
+			throwOnError: true, // We will catch the error
 		};
 
-		// Try rendering with KaTeX
 		const rendered = katex.renderToString(processedTex, katexOptions);
 		rendererState.katexSuccess++;
 
@@ -1116,55 +1021,33 @@ async function renderMathExpression(tex, displayMode = false, element = null) {
 
 		return { success: true, method: "katex", element };
 	} catch (katexError) {
-		// KaTeX rendering failed. Log the error for debugging.
+		// --- This is the new, robust fallback logic ---
 		reportKaTeXError(tex, katexError);
-		log(
-			LOG_LEVEL.WARN,
-			"[WebTeX] KaTeX rendering failed, falling back to custom parser for:",
-			cleanedTex,
-		);
 
-		// Log detailed error information for debugging
-		console.error("[WebTeX] KaTeX error details:", {
-			originalTex: tex,
-			cleanedTex: cleanedTex,
-			processedTex: processedTex,
-			isDisplayMath: isDisplayMath,
-			error: katexError,
-			errorMessage: katexError.message,
-			stack: katexError.stack,
-		});
+		// Use the original, un-simplified text for the fallback to avoid cascading errors.
+		const fallbackText = cleanedTex;
 
 		try {
-			// Immediately attempt to use the simple, robust HTML fallback renderer.
-			const fallbackElement = customParser.renderFallback(cleanedTex, isDisplayMath);
-
+			const fallbackElement = customParser.renderFallback(fallbackText, isDisplayMath);
 			if (element && fallbackElement) {
-				// Clear any previous attempts and append the safe fallback.
+				// Clear any failed render attempts and append the safe fallback.
 				element.innerHTML = "";
-				element.appendChild(fallbackElement);
+				element.appendChild(fallbackElement); // Correctly append the HTML element
 				element.classList.add("webtex-custom-rendered");
 				rendererState.customParserFallback++;
 				return { success: true, method: "custom-fallback", element };
 			}
 		} catch (fallbackError) {
-			// This is a safety net in case the simple fallback itself fails.
 			log(LOG_LEVEL.ERROR, "The custom HTML fallback renderer also failed:", fallbackError);
-			// Log the full error object for debugging
-			console.error("[WebTeX] Full fallback error details:", {
-				originalTex: tex,
-				cleanedTex: cleanedTex,
-				error: fallbackError,
-				stack: fallbackError.stack,
-			});
 		}
 
-		// If all else fails, display the original, un-rendered text to prevent a crash.
+		// Ultimate fallback: display the original text to prevent script crash.
 		if (element) {
-			element.textContent = tex;
+			element.textContent = tex; // Use the raw original `tex`
 			element.classList.add("webtex-error-fallback");
-			element.title = "WebTeX failed to render this expression.";
+			element.title = katexError.message || "WebTeX failed to render this expression.";
 		}
+
 		return { success: false, method: "error", element, error: katexError };
 	}
 }
