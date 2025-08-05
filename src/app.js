@@ -281,10 +281,10 @@ function removeCSS() {
 /* -------------------------------------------------- */
 // Reusable entity decoder for performance
 function decodeHTMLEntities(text) {
-	// Use the browser's built-in HTML parser for safe and complete HTML entity decoding
-	const textarea = document.createElement("textarea");
-	textarea.textContent = text;
-	return textarea.value;
+	// Use DOMParser to safely decode HTML entities
+	const parser = new DOMParser();
+	const doc = parser.parseFromString(text, "text/html");
+	return doc.documentElement.textContent;
 }
 
 /* -------------------------------------------------- */
