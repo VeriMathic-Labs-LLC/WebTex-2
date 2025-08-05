@@ -1004,6 +1004,9 @@ async function renderMathExpression(tex, displayMode = false, element = null) {
 		processedTex = customParser.fixUnmatchedBraces(processedTex);
 		processedTex = cleanupEmptyBraces(processedTex);
 
+		// Additional safety check for unmatched braces that might cause parse errors
+		processedTex = processedTex.replace(/\\text\{([^}]*)$/g, "\\text{$1}");
+
 		// Simplify complex structures for KaTeX
 		processedTex = customParser.simplify(processedTex);
 
@@ -1023,6 +1026,10 @@ async function renderMathExpression(tex, displayMode = false, element = null) {
 				}
 				// Handle text mode accent commands in math mode (common in user input)
 				if (errorCode === "mathVsTextAccents") {
+					return "ignore";
+				}
+				// Handle Unicode character warnings (we've already processed them)
+				if (errorCode === "unknownSymbol") {
 					return "ignore";
 				}
 				// For all other issues, continue to show a warning in the console.
@@ -1268,6 +1275,102 @@ function handleUnicodeInMath(tex) {
 		"⅒": "\\frac{1}{10}",
 	};
 
+	// Common Unicode symbols and their LaTeX equivalents
+	const unicodeSymbols = {
+		"→": "\\rightarrow",
+		"←": "\\leftarrow",
+		"↔": "\\leftrightarrow",
+		"⇒": "\\Rightarrow",
+		"⇐": "\\Leftarrow",
+		"⇔": "\\Leftrightarrow",
+		"∈": "\\in",
+		"∉": "\\notin",
+		"⊆": "\\subseteq",
+		"⊂": "\\subset",
+		"⊇": "\\supseteq",
+		"⊃": "\\supset",
+		"∩": "\\cap",
+		"∪": "\\cup",
+		"∅": "\\emptyset",
+		"∞": "\\infty",
+		"±": "\\pm",
+		"∓": "\\mp",
+		"×": "\\times",
+		"÷": "\\div",
+		"≤": "\\leq",
+		"≥": "\\geq",
+		"≠": "\\neq",
+		"≈": "\\approx",
+		"≡": "\\equiv",
+		"≅": "\\cong",
+		"∝": "\\propto",
+		"∑": "\\sum",
+		"∏": "\\prod",
+		"∫": "\\int",
+		"∬": "\\iint",
+		"∭": "\\iiint",
+		"∮": "\\oint",
+		"∇": "\\nabla",
+		"∂": "\\partial",
+		"√": "\\sqrt",
+		"∛": "\\sqrt[3]",
+		"∜": "\\sqrt[4]",
+		α: "\\alpha",
+		β: "\\beta",
+		γ: "\\gamma",
+		δ: "\\delta",
+		ε: "\\epsilon",
+		ζ: "\\zeta",
+		η: "\\eta",
+		θ: "\\theta",
+		ι: "\\iota",
+		κ: "\\kappa",
+		λ: "\\lambda",
+		μ: "\\mu",
+		ν: "\\nu",
+		ξ: "\\xi",
+		π: "\\pi",
+		ρ: "\\rho",
+		σ: "\\sigma",
+		τ: "\\tau",
+		υ: "\\upsilon",
+		φ: "\\phi",
+		χ: "\\chi",
+		ψ: "\\psi",
+		ω: "\\omega",
+		Α: "\\Alpha",
+		Β: "\\Beta",
+		Γ: "\\Gamma",
+		Δ: "\\Delta",
+		Ε: "\\Epsilon",
+		Ζ: "\\Zeta",
+		Η: "\\Eta",
+		Θ: "\\Theta",
+		Ι: "\\Iota",
+		Κ: "\\Kappa",
+		Λ: "\\Lambda",
+		Μ: "\\Mu",
+		Ν: "\\Nu",
+		Ξ: "\\Xi",
+		Π: "\\Pi",
+		Ρ: "\\Rho",
+		Σ: "\\Sigma",
+		Τ: "\\Tau",
+		Υ: "\\Upsilon",
+		Φ: "\\Phi",
+		Χ: "\\Chi",
+		Ψ: "\\Psi",
+		Ω: "\\Omega",
+		"❌": "\\text{❌}",
+		"✅": "\\text{✅}",
+		"✔": "\\text{✔}",
+		"✘": "\\text{✘}",
+		"✓": "\\text{✓}",
+		"☐": "\\text{☐}",
+		"☑": "\\text{☑}",
+		"☒": "\\text{☒}",
+	};
+
 	let processed = tex;
 
 	// Replace Unicode fractions with LaTeX fractions
@@ -1275,12 +1378,10 @@ function handleUnicodeInMath(tex) {
 		processed = processed.replace(new RegExp(unicode, "g"), latex);
 	});
 
-	// Common Unicode math symbols
-	processed = processed.replace(/→/g, "\\rightarrow");
-	processed = processed.replace(/∈/g, "\\in");
-	processed = processed.replace(/⊆/g, "\\subseteq");
-	processed = processed.replace(/ν/g, "\\nu");
-	processed = processed.replace(/γ/g, "\\gamma");
+	// Replace Unicode symbols with LaTeX equivalents
+	Object.entries(unicodeSymbols).forEach(([unicode, latex]) => {
+		processed = processed.replace(new RegExp(unicode, "g"), latex);
+	});
 
 	// Handle other Unicode characters by wrapping them in \text{}
 	// This regex matches Unicode characters that are not already in \text{} or other commands
