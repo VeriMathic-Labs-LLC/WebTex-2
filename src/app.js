@@ -283,7 +283,7 @@ function removeCSS() {
 function decodeHTMLEntities(text) {
 	// Use a textarea element to decode HTML entities efficiently and safely
 	const textarea = document.createElement('textarea');
-	textarea.innerHTML = text;
+	textarea.textContent = text;
 	return textarea.value;
 }
 
