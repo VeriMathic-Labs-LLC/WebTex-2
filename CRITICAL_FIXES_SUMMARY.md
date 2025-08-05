@@ -14,7 +14,7 @@ This document summarizes the critical fixes applied to address the major issues 
 { pattern: /\$([^$\n]+?)\$/g, display: false }
 
 // After (improved):
-{ pattern: /\$((?:[^\$]|\\\$)+?)\$/g, display: false }
+{ pattern: new RegExp(['\\$((?:[^\\$]|\\\\\\$)+?)\\$'], 'g'), display: false }
 ```
 
 **Changes Made**:
