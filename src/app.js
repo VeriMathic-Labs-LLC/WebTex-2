@@ -1100,7 +1100,7 @@ function findMathExpressions(root) {
 		// Enhanced regex patterns for math detection
 		const patterns = [
 			// Display math: $$...$$ and \[...\]
-			{ pattern: /\$\$([\s\S]+?)\$\$/g, display: true },
+			{ pattern: /\$\$([\s\S]*?)\$\$/g, display: true },
 			{ pattern: /\\\[([\s\S]+?)\\\]/g, display: true },
 			// Inline math: $...$ and \(...\) (handle escaped dollar signs)
 			{ pattern: /\$((?:[^\$]|\\\$)+?)\$/g, display: false },
