@@ -32,9 +32,11 @@ This document summarizes the critical fixes applied to address the major issues 
 // Before (ineffective):
 function decodeHTMLEntities(text) {
     return text
-        .replace(/&/g, "&")  // This was wrong
-        .replace(/</g, "<")  // This was wrong
-        // ... etc
+        .replace(/&amp;/g, "&")
+        .replace(/&lt;/g, "<")
+        .replace(/&gt;/g, ">")
+        .replace(/&quot;/g, '"')
+        .replace(/&#39;/g, "'"); // ... etc
 }
 
 // After (effective):
