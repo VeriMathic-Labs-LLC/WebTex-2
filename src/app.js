@@ -1006,7 +1006,14 @@ async function renderMathExpression(tex, displayMode = false, element = null) {
 		const katexOptions = {
 			displayMode: isDisplayMath,
 			errorColor: "inherit",
-			strict: "warn",
+			strict: (errorCode) => {
+				// This is a known, safe-to-ignore warning for matrices and aligned environments.
+				if (errorCode === "newLineInDisplayMode") {
+					return "ignore";
+				}
+				// For all other issues, continue to show a warning in the console.
+				return "warn";
+			},
 			trust: false,
 			throwOnError: true, // We will catch the error
 		};
