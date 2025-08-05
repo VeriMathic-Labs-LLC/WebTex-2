@@ -40,7 +40,7 @@ function decodeHTMLEntities(text) {
 // After (effective):
 function decodeHTMLEntities(text) {
     const textarea = document.createElement("textarea");
-    textarea.innerHTML = text;
+    textarea.textContent = text;
     return textarea.value;
 }
 ```
