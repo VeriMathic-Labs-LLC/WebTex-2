@@ -41,8 +41,7 @@ function decodeHTMLEntities(text) {
 
 // After (effective):
 function decodeHTMLEntities(text) {
-    const parser = new DOMParser();
-    const doc = parser.parseFromString(text, 'text/html');
+    const doc = new DOMParser().parseFromString(text, 'text/html');
     return doc.body.textContent || "";
 }
 
