@@ -281,12 +281,10 @@ function removeCSS() {
 /* -------------------------------------------------- */
 // Reusable entity decoder for performance
 function decodeHTMLEntities(text) {
-	return text
-		.replace(/&amp;/g, "&")
-		.replace(/&lt;/g, "<")
-		.replace(/&gt;/g, ">")
-		.replace(/&quot;/g, '"')
-		.replace(/&#39;/g, "'");
+	// Use the browser's built-in HTML parser for safe and complete HTML entity decoding
+	const textarea = document.createElement("textarea");
+	textarea.innerHTML = text;
+	return textarea.value;
 }
 
 /* -------------------------------------------------- */
@@ -1101,12 +1099,12 @@ function findMathExpressions(root) {
 
 		// Enhanced regex patterns for math detection
 		const patterns = [
-			// Display math
-			{ pattern: /\$\$([\s\S]*?)\$\$/g, display: true },
-			{ pattern: /\\\[([\s\S]*?)\\\]/g, display: true },
-			// Inline math
-			{ pattern: /\$([^$\n]+?)\$/g, display: false },
-			{ pattern: /\\\(([\s\S]*?)\\\)/g, display: false },
+			// Display math: $$...$$ and \[...\]
+			{ pattern: /\$\$([\s\S]+?)\$\$/g, display: true },
+			{ pattern: /\\\[([\s\S]+?)\\\]/g, display: true },
+			// Inline math: $...$ and \(...\) (handle escaped dollar signs)
+			{ pattern: /\$((?:[^\$]|\\\$)+?)\$/g, display: false },
+			{ pattern: /\\\(([\s\S]+?)\\\)/g, display: false },
 		];
 
 		patterns.forEach(({ pattern, display }) => {
