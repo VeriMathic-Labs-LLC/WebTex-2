@@ -103,6 +103,16 @@ async function injectCSS() {
 	box-sizing: border-box;
 }
 
+/* Failed render styling */
+.webtex-failed-render {
+	background: rgba(255, 193, 7, 0.1);
+	border: 1px solid rgba(255, 193, 7, 0.3);
+	border-radius: 3px;
+	padding: 1px 2px;
+	margin: 0 1px;
+	cursor: help;
+}
+
 /* Ensure all rendered elements inherit color */
 .webtex-katex-rendered,
 .webtex-custom-rendered {
@@ -1076,7 +1086,8 @@ function findMathExpressions(root) {
 				node.parentElement &&
 				(node.parentElement.classList.contains("webtex-processed") ||
 					node.parentElement.classList.contains("webtex-ignore") ||
-					node.parentElement.closest(".webtex-ignore"))
+					node.parentElement.closest(".webtex-ignore") ||
+					node.parentElement.classList.contains("webtex-math-container"))
 			) {
 				return NodeFilter.FILTER_REJECT;
 			}
@@ -1159,6 +1170,9 @@ async function processMathExpressions(expressions) {
 			const textNode = document.createTextNode(expr.match);
 			textNode.dataset = { originalText: expr.match };
 			container.appendChild(textNode);
+			// Mark container as processed to prevent infinite loop on failed renders
+			container.classList.add("webtex-processed", "webtex-failed-render");
+			container.title = "WebTeX: Failed to render this LaTeX expression";
 		}
 
 		if (after) {
