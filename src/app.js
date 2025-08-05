@@ -280,6 +280,79 @@ function decodeHTMLEntities(text) {
 }
 
 /* -------------------------------------------------- */
+// Logging system for debugging and error tracking
+const LOG_LEVEL = {
+	ERROR: 1,
+	WARN: 2,
+	INFO: 3,
+	DEBUG: 4,
+};
+
+const CURRENT_LOG_LEVEL = LOG_LEVEL.WARN; // Show WARN and ERROR by default
+
+function log(level, ...args) {
+	if (level <= CURRENT_LOG_LEVEL) {
+		const timestamp = new Date().toISOString().substring(11, 23); // HH:MM:SS.mmm
+		const prefix = `[WebTeX ${timestamp}]`;
+
+		switch (level) {
+			case LOG_LEVEL.ERROR:
+				console.error(prefix, ...args);
+				break;
+			case LOG_LEVEL.WARN:
+				console.warn(prefix, ...args);
+				break;
+			case LOG_LEVEL.INFO:
+				console.info(prefix, ...args);
+				break;
+			case LOG_LEVEL.DEBUG:
+				console.log(prefix, ...args);
+				break;
+			default:
+				console.log(prefix, ...args);
+		}
+	}
+}
+
+// Expose logging controls globally for debugging
+window.WebTeXLogging = {
+	setLevel: (level) => {
+		window.WEBTEX_LOG_LEVEL = level;
+		console.log(
+			`[WebTeX] Log level set to ${Object.keys(LOG_LEVEL)[Object.values(LOG_LEVEL).indexOf(level)]}`,
+		);
+	},
+	showErrors: () => window.WebTeXLogging.setLevel(LOG_LEVEL.ERROR),
+	showWarnings: () => window.WebTeXLogging.setLevel(LOG_LEVEL.WARN),
+	showInfo: () => window.WebTeXLogging.setLevel(LOG_LEVEL.INFO),
+	showDebug: () => window.WebTeXLogging.setLevel(LOG_LEVEL.DEBUG),
+	showAll: () => window.WebTeXLogging.setLevel(LOG_LEVEL.DEBUG),
+	hide: () => window.WebTeXLogging.setLevel(0),
+};
+
+// Global error handler for WebTeX
+window.addEventListener("error", (event) => {
+	if (event.filename?.includes("app.js")) {
+		log(LOG_LEVEL.ERROR, "Unhandled WebTeX error:", event.error);
+		console.error("[WebTeX] Global error caught:", {
+			message: event.message,
+			filename: event.filename,
+			lineno: event.lineno,
+			colno: event.colno,
+			error: event.error,
+			stack: event.error?.stack,
+		});
+	}
+});
+
+// Global promise rejection handler
+window.addEventListener("unhandledrejection", (event) => {
+	if (event.reason?.toString().includes("WebTeX")) {
+		log(LOG_LEVEL.ERROR, "Unhandled WebTeX promise rejection:", event.reason);
+		console.error("[WebTeX] Unhandled promise rejection:", event.reason);
+	}
+});
+
 let observer = null;
 let isEnabled = false;
 const _katexLoaded = true; // KaTeX is bundled
@@ -846,12 +919,9 @@ class CustomLatexParser {
 
 	processDerivatives(str) {
 		// Handle derivatives properly
-		// Convert d/dx patterns
-		str = str.replace(/\\frac\{d\}\{dx\}/g, "\\frac{\\mathrm{d}}{\\mathrm{d}x}");
-		str = str.replace(
-			/\\frac\\{\\mathrm\\{d\\}([^}]*)\\{\\mathrm\\{d\\}x/g,
-			"\\frac{\\mathrm{d}}{\\mathrm{d}x}",
-		);
+		// Convert d/dx patterns. Wrap the fraction in braces {} to remove
+		// ambiguity when it's followed by brackets, like [x^n].
+		str = str.replace(/\\frac\{d\}\{dx\}/g, "{\\frac{\\mathrm{d}}{\\mathrm{d}x}}");
 
 		// Handle standalone d in derivatives (but not in other contexts)
 		str = str.replace(/\b([dfgh])\(x\)/g, "$1(x)"); // Keep function names as-is
@@ -1046,113 +1116,56 @@ async function renderMathExpression(tex, displayMode = false, element = null) {
 
 		return { success: true, method: "katex", element };
 	} catch (katexError) {
-		// Check if this is an invalid command error
-		const isInvalidCommand =
-			katexError.message &&
-			/undefined control sequence|can't use function|unknown function|invalid\s*command/i.test(
-				katexError.message,
-			);
+		// KaTeX rendering failed. Log the error for debugging.
+		reportKaTeXError(tex, katexError);
+		log(
+			LOG_LEVEL.WARN,
+			"[WebTeX] KaTeX rendering failed, falling back to custom parser for:",
+			cleanedTex,
+		);
 
-		// Only log non-command-related errors to reduce console noise
-		if (!isInvalidCommand) {
-			log(
-				LOG_LEVEL.WARN,
-				"[WebTeX] KaTeX rendering failed, falling back to custom parser:",
-				katexError,
-			);
-			reportKaTeXError(tex, katexError);
-		}
+		// Log detailed error information for debugging
+		console.error("[WebTeX] KaTeX error details:", {
+			originalTex: tex,
+			cleanedTex: cleanedTex,
+			processedTex: processedTex,
+			isDisplayMath: isDisplayMath,
+			error: katexError,
+			errorMessage: katexError.message,
+			stack: katexError.stack,
+		});
 
-		// Define KaTeX options for fallback rendering
-		const fallbackKatexOptions = {
-			displayMode: displayMode,
-			throwOnError: false,
-			errorColor: "#cc0000",
-			strict: false,
-			trust: true,
-			output: "html",
-			macros: {},
-		};
-
-		// Try custom parser as fallback
 		try {
-			let processedTex = cleanedTex;
+			// Immediately attempt to use the simple, robust HTML fallback renderer.
+			const fallbackElement = customParser.renderFallback(cleanedTex, isDisplayMath);
 
-			// If we have an invalid command, try to handle it gracefully
-			if (isInvalidCommand) {
-				// Try to extract the command name for better error reporting
-				const commandMatch = katexError.message.match(/Undefined control sequence: \\?([a-zA-Z]+)/);
-				if (commandMatch) {
-					const command = commandMatch[1];
-					// Only log the warning in development
-					if (process.env.NODE_ENV !== "production") {
-						log(LOG_LEVEL.DEBUG, `Undefined command: \\${command}. Using fallback rendering.`);
-					}
-
-					// Add the undefined command to macros to prevent further errors
-					fallbackKatexOptions.macros[`\\${command}`] = `\\text{\\${command}}`;
-
-					// Replace the undefined command with text representation
-					// First, handle commands with arguments: \command{arg}
-					processedTex = processedTex.replace(
-						new RegExp(`\\\\${command}\\s*\\{([^}]*)\\}`, "g"),
-						`\\\\text{\\${command}{$1}}`,
-					);
-					// Then handle standalone commands: \command
-					processedTex = processedTex.replace(
-						new RegExp(`\\\\${command}(?![a-zA-Z])`, "g"),
-						`\\\\text{\\${command}}`,
-					);
-				}
-			}
-
-			const simplified = customParser.simplify(processedTex);
-			const processedSimplified = handleUnicodeInMath(simplified);
-
-			// Try rendering with the custom parser first
-			const customResult = customParser.renderFallback(processedSimplified, displayMode);
-			if (customResult) {
-				if (element) {
-					element.innerHTML = customResult;
-				}
-				return { success: true, method: "custom-fallback", element };
-			}
-
-			// If custom parser fails, try KaTeX with fallback options
-			const rendered = katex.renderToString(processedSimplified, {
-				...fallbackKatexOptions,
-				displayMode: displayMode,
-			});
-
-			if (element) {
-				element.innerHTML = rendered;
-				element.classList.add("webtex-custom-rendered");
-			}
-
-			rendererState.customParserFallback++;
-			return { success: true, method: "katex-fallback", element };
-		} catch (customError) {
-			log(LOG_LEVEL.WARN, "Custom parser fallback failed:", customError);
-
-			// Final fallback - show original text with error styling
-			if (element) {
-				const fallbackElement = customParser.renderFallback(tex, isDisplayMath);
+			if (element && fallbackElement) {
+				// Clear any previous attempts and append the safe fallback.
 				element.innerHTML = "";
 				element.appendChild(fallbackElement);
-				element.classList.add("webtex-error-fallback");
-
-				// Provide more specific error information
-				let errorMessage = "Rendering failed";
-				if (isInvalidCommand) {
-					errorMessage = "Invalid LaTeX command";
-				} else if (customError.message) {
-					errorMessage = customError.message;
-				}
-				element.title = errorMessage;
+				element.classList.add("webtex-custom-rendered");
+				rendererState.customParserFallback++;
+				return { success: true, method: "custom-fallback", element };
 			}
-
-			return { success: false, method: "error", element, error: customError };
+		} catch (fallbackError) {
+			// This is a safety net in case the simple fallback itself fails.
+			log(LOG_LEVEL.ERROR, "The custom HTML fallback renderer also failed:", fallbackError);
+			// Log the full error object for debugging
+			console.error("[WebTeX] Full fallback error details:", {
+				originalTex: tex,
+				cleanedTex: cleanedTex,
+				error: fallbackError,
+				stack: fallbackError.stack,
+			});
 		}
+
+		// If all else fails, display the original, un-rendered text to prevent a crash.
+		if (element) {
+			element.textContent = tex;
+			element.classList.add("webtex-error-fallback");
+			element.title = "WebTeX failed to render this expression.";
+		}
+		return { success: false, method: "error", element, error: katexError };
 	}
 }
 
@@ -1375,14 +1388,27 @@ async function safeRender(root = document.body) {
 
 		const expressions = findMathExpressions(root);
 		if (expressions.length > 0) {
+			log(LOG_LEVEL.DEBUG, `[WebTeX] Processing ${expressions.length} math expressions`);
 			await processMathExpressions(expressions);
 		}
-	} catch (_e) {}
+	} catch (error) {
+		log(LOG_LEVEL.ERROR, "Error in safeRender:", error);
+		console.error("[WebTeX] SafeRender error details:", {
+			error: error,
+			message: error.message,
+			stack: error.stack,
+			root: root,
+			isEnabled: isEnabled,
+		});
+	}
 }
 
 /* -------------------------------------------------- */
 // Main initialization
 (async function main() {
+	log(LOG_LEVEL.INFO, "WebTeX extension initializing...");
+	console.log("[WebTeX] Extension starting up - check console for detailed error logs");
+
 	const { allowedDomains = [] } = await chrome.storage.local.get("allowedDomains");
 
 	const isLocalFile = location.protocol === "file:";
