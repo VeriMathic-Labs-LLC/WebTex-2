@@ -41,9 +41,11 @@ function decodeHTMLEntities(text) {
 
 // After (effective):
 function decodeHTMLEntities(text) {
-    const doc = new DOMParser().parseFromString(text, 'text/html');
-    return doc.body.textContent || "";
+    const textarea = document.createElement("textarea");
+    textarea.innerHTML = text;
+    return textarea.value;
 }
+```
 
 **File**: `src/app.js` lines 284-293
 
