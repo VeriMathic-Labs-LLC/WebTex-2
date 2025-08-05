@@ -281,6 +281,12 @@ function removeCSS() {
 /* -------------------------------------------------- */
 // Reusable entity decoder for performance
 function decodeHTMLEntities(text) {
+	// Input validation: reject dangerous HTML tags to prevent XSS
+	const dangerousTagPattern = /<\s*(script|iframe|object|embed|style|link|meta|svg|math|base|form|input|button|textarea|select|option|applet|frame|frameset|img|audio|video|source|track|canvas|details|dialog|menu|menuitem|template|noscript|basefont|bgsound|isindex|keygen|marquee|plaintext|xmp)[^>]*>/i;
+	if (dangerousTagPattern.test(text)) {
+		log(LOG_LEVEL.WARN, "decodeHTMLEntities: Dangerous HTML detected in input, rejecting.");
+		return "";
+	}
 	// Use DOMParser to decode HTML entities safely
 	const doc = new DOMParser().parseFromString(text, "text/html");
 	return doc.body.textContent || doc.documentElement.textContent || "";
