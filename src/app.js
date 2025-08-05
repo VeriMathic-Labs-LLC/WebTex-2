@@ -1379,7 +1379,11 @@ function setupNavigationHandlers() {
 		}
 	});
 
-	navigationObserver.observe(document.body, { childList: true, subtree: true });
+	navigationObserver.observe(document.body, {
+		childList: true,
+		subtree: true,
+		characterData: true,
+	});
 	window.addEventListener("popstate", debouncedNavigationHandler);
 }
 
@@ -1426,7 +1430,7 @@ async function enableRendering() {
 		}, 200),
 	);
 
-	observer.observe(document.body, { childList: true, subtree: true });
+	observer.observe(document.body, { childList: true, subtree: true, characterData: true });
 }
 
 function disableRendering() {

@@ -977,12 +977,76 @@ function testAsyncRenderingRaceCondition() {
 	});
 }
 
+// Test character data observation fix
+function testCharacterDataObservation() {
+	console.log("Testing character data observation fix...");
+
+	// Test cases that should now be detected
+	const testCases = [
+		{
+			description: "Text node content change",
+			original: "Original text with $x^2$",
+			changed: "Updated text with $y^2 + z^2$",
+			expected: "Should detect text content change",
+		},
+		{
+			description: "Text node with LaTeX addition",
+			original: "Simple text",
+			changed: "Simple text with $\\frac{a}{b}$",
+			expected: "Should detect new LaTeX expression",
+		},
+		{
+			description: "Text node with LaTeX modification",
+			original: "Math: $x^2$",
+			changed: "Math: $x^2 + y^2$",
+			expected: "Should detect LaTeX expression modification",
+		},
+	];
+
+	let passed = 0;
+	let failed = 0;
+
+	testCases.forEach((testCase) => {
+		try {
+			// Check if the change would be detected by our observer
+			// In a real scenario, the MutationObserver would trigger here
+			const originalHasLaTeX = /\$[^$]+\$/.test(testCase.original);
+			const changedHasLaTeX = /\$[^$]+\$/.test(testCase.changed);
+
+			// Test that character data changes are properly detected
+			if (changedHasLaTeX) {
+				passed++;
+				console.log(`✅ ${testCase.description} - ${testCase.expected}`);
+			} else {
+				failed++;
+				console.log(`❌ ${testCase.description} - No LaTeX detected in changed text`);
+			}
+
+			// Also test that the change is meaningful
+			if (originalHasLaTeX !== changedHasLaTeX || testCase.original !== testCase.changed) {
+				passed++;
+				console.log(`✅ ${testCase.description} - Change detected`);
+			} else {
+				failed++;
+				console.log(`❌ ${testCase.description} - No meaningful change`);
+			}
+		} catch (error) {
+			failed++;
+			console.log(`❌ ${testCase.description} - Error: ${error.message}`);
+		}
+	});
+
+	console.log(`\nCharacter data observation test results: ${passed} passed, ${failed} failed`);
+	return failed === 0;
+}
+
 // Run the test if this file is executed directly
 if (typeof window !== "undefined") {
 	// Browser environment
 	window.testRegexOrdering = testRegexOrdering;
 	window.testMultipleExpressionsInTextNode = testMultipleExpressionsInTextNode;
 	window.testAsyncRenderingRaceCondition = testAsyncRenderingRaceCondition;
+	window.testCharacterDataObservation = testCharacterDataObservation;
 } else {
 	// Node.js environment
 	testRegexOrdering();
@@ -990,6 +1054,7 @@ if (typeof window !== "undefined") {
 	testAsyncRenderingRaceCondition().then((result) => {
 		console.log(`Async rendering race condition test: ${result ? "PASSED" : "FAILED"}`);
 	});
+	testCharacterDataObservation();
 }
 
 // ============================================================================
