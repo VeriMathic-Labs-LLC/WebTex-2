@@ -1368,7 +1368,9 @@ function setupNavigationHandlers() {
 	navigationHandlersSetup = true;
 	let lastUrl = location.href;
 
-	const debouncedNavigationHandler = debounce(handleNavigation, 100);
+	const debouncedNavigationHandler = debounce(async () => {
+		await handleNavigation();
+	}, 100);
 
 	const navigationObserver = new MutationObserver(() => {
 		if (location.href !== lastUrl) {
@@ -1381,36 +1383,46 @@ function setupNavigationHandlers() {
 	window.addEventListener("popstate", debouncedNavigationHandler);
 }
 
-function handleNavigation() {
+async function handleNavigation() {
 	if (!isEnabled) return;
-	safeRender();
+	await safeRender();
 }
 
 async function enableRendering() {
 	await injectCSS(); // Inject styles when enabling
-	safeRender();
+	await safeRender(); // Wait for initial render to complete
 
 	observer = new MutationObserver(
-		debounce((muts) => {
+		debounce(async (muts) => {
 			if (mutationsOnlyRipple(muts) || userIsSelectingText() || typingInsideActiveElement(muts)) {
 				return;
 			}
 
-			muts;
+			// Collect all nodes that need rendering to avoid race conditions
+			const nodesToRender = new Set();
+
 			muts.forEach((m) => {
 				// Process the mutation target itself (covers character data changes)
-				safeRender(m.target);
+				nodesToRender.add(m.target);
 
 				// Handle added nodes (elements OR text)
 				m.addedNodes.forEach((n) => {
 					if (n.nodeType === 3) {
 						// Text node – re-render its parent
-						safeRender(n.parentNode || document.body);
+						nodesToRender.add(n.parentNode || document.body);
 					} else if (n.nodeType === 1 && !n.closest(".webtex-ignore")) {
-						safeRender(n);
+						nodesToRender.add(n);
 					}
 				});
 			});
+
+			// Render all collected nodes in a single pass
+			for (const node of nodesToRender) {
+				if (node?.parentNode) {
+					// Ensure node still exists
+					await safeRender(node);
+				}
+			}
 		}, 200),
 	);
 

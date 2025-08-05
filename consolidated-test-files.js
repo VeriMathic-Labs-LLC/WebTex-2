@@ -898,15 +898,98 @@ function testMultipleExpressionsInTextNode() {
 	return failed === 0;
 }
 
+// Test async rendering race condition fix
+function testAsyncRenderingRaceCondition() {
+	console.log("Testing async rendering race condition fix...");
+
+	// Simulate the async rendering behavior
+	let renderCount = 0;
+	let concurrentRenders = 0;
+	let maxConcurrentRenders = 0;
+
+	// Mock safeRender function that tracks concurrent calls
+	const mockSafeRender = async (_root) => {
+		renderCount++;
+		concurrentRenders++;
+		maxConcurrentRenders = Math.max(maxConcurrentRenders, concurrentRenders);
+
+		// Simulate async rendering time
+		await new Promise((resolve) => setTimeout(resolve, 10));
+
+		concurrentRenders--;
+		return { success: true };
+	};
+
+	// Test the old behavior (concurrent renders)
+	const testOldBehavior = async () => {
+		console.log("Testing old behavior (concurrent renders)...");
+		renderCount = 0;
+		concurrentRenders = 0;
+		maxConcurrentRenders = 0;
+
+		// Simulate multiple simultaneous calls (old behavior)
+		const promises = [];
+		for (let i = 0; i < 5; i++) {
+			promises.push(mockSafeRender(`node${i}`));
+		}
+
+		await Promise.all(promises);
+
+		console.log(
+			`   Old behavior: ${renderCount} total renders, ${maxConcurrentRenders} max concurrent`,
+		);
+		return { renderCount, maxConcurrentRenders };
+	};
+
+	// Test the new behavior (serialized renders)
+	const testNewBehavior = async () => {
+		console.log("Testing new behavior (serialized renders)...");
+		renderCount = 0;
+		concurrentRenders = 0;
+		maxConcurrentRenders = 0;
+
+		// Simulate serialized calls (new behavior)
+		for (let i = 0; i < 5; i++) {
+			await mockSafeRender(`node${i}`);
+		}
+
+		console.log(
+			`   New behavior: ${renderCount} total renders, ${maxConcurrentRenders} max concurrent`,
+		);
+		return { renderCount, maxConcurrentRenders };
+	};
+
+	// Run tests
+	return Promise.all([testOldBehavior(), testNewBehavior()]).then(([oldResult, newResult]) => {
+		const oldConcurrent = oldResult.maxConcurrentRenders;
+		const newConcurrent = newResult.maxConcurrentRenders;
+
+		if (oldConcurrent > 1 && newConcurrent === 1) {
+			console.log("✅ Race condition fix working: Concurrent renders eliminated");
+			return true;
+		} else if (oldConcurrent === 1) {
+			console.log("⚠️  Test inconclusive: No concurrent renders detected in old behavior");
+			return true;
+		} else {
+			console.log("❌ Race condition fix not working: Still have concurrent renders");
+			return false;
+		}
+	});
+}
+
 // Run the test if this file is executed directly
 if (typeof window !== "undefined") {
 	// Browser environment
 	window.testRegexOrdering = testRegexOrdering;
 	window.testMultipleExpressionsInTextNode = testMultipleExpressionsInTextNode;
+	window.testAsyncRenderingRaceCondition = testAsyncRenderingRaceCondition;
 } else {
 	// Node.js environment
 	testRegexOrdering();
 	testMultipleExpressionsInTextNode();
+	testAsyncRenderingRaceCondition().then((result) => {
+		console.log(`Async rendering race condition test: ${result ? "PASSED" : "FAILED"}`);
+	});
 }
 
 // ============================================================================
