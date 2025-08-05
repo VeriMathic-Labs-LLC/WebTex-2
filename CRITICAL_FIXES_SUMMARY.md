@@ -43,7 +43,7 @@ function decodeHTMLEntities(text) {
 function decodeHTMLEntities(text) {
     const parser = new DOMParser();
     const doc = parser.parseFromString(text, 'text/html');
-    return doc.documentElement.textContent;
+    return doc.body.textContent || "";
 }
 - Handles edge cases that manual replacement missed
 
