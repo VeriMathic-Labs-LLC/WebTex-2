@@ -39,9 +39,9 @@ function decodeHTMLEntities(text) {
 
 // After (effective):
 function decodeHTMLEntities(text) {
-    const parser = new DOMParser();
-    const doc = parser.parseFromString(text, "text/html");
-    return doc.documentElement.textContent;
+    const textarea = document.createElement('textarea');
+    textarea.innerHTML = text;
+    return textarea.value;
 }
 - Handles edge cases that manual replacement missed
 
