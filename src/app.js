@@ -1118,19 +1118,7 @@ function findMathExpressions(root) {
 			//     )+?        - Repeat one or more times, non-greedy
 			//   )            - End capturing group
 			//   \$           - Match a literal dollar sign (end delimiter)
-			{ pattern: new RegExp(
-				[
-					'\\$',                // Opening dollar sign
-					'(',                  // Start capture group
-					'(?:',                // Non-capturing group
-					'[^\\$]',             // Any character except dollar
-					'|\\\\\$',            // OR an escaped dollar sign
-					')+?',                // Repeat one or more times, non-greedy
-					')',                  // End capture group
-					'\\$'                 // Closing dollar sign
-				].join(''),
-				'g'
-			), display: false },
+			{ pattern: /\$((?:[^\$]|\\\$)+?)\$/g, display: false },
 			{ pattern: /\\\(([\s\S]*?)\\\)/g, display: false },
 		];
 
