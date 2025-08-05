@@ -39,15 +39,10 @@ function decodeHTMLEntities(text) {
 
 // After (effective):
 function decodeHTMLEntities(text) {
-    const textarea = document.createElement("textarea");
-    textarea.textContent = text;
-    return textarea.value;
+    const parser = new DOMParser();
+    const doc = parser.parseFromString(text, "text/html");
+    return doc.documentElement.textContent;
 }
-```
-
-**Benefits**:
-- Properly decodes all HTML entities including numeric entities
-- Uses browser's built-in parser for safety and completeness
 - Handles edge cases that manual replacement missed
 
 **File**: `src/app.js` lines 283-289
