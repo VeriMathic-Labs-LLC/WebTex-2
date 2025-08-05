@@ -1,5 +1,7 @@
 # WebTeX Documentation - Consolidated
 
+**Version**: 2.1.0 • 2025-08-05
+
 This document consolidates all WebTeX documentation and fix summaries.
 
 ## Table of Contents

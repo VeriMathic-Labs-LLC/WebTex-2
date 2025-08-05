@@ -1039,7 +1039,17 @@ async function renderMathExpression(tex, displayMode = false, element = null) {
 			throwOnError: true, // We will catch the error
 		};
 
-		const rendered = katex.renderToString(processedTex, katexOptions);
+		const originalWarn = console.warn;
+		console.warn = (msg, ...rest) => {
+			if (typeof msg === "string" && msg.includes("No character metrics for")) return;
+			originalWarn.call(console, msg, ...rest);
+		};
+		let rendered;
+		try {
+			rendered = katex.renderToString(processedTex, katexOptions);
+		} finally {
+			console.warn = originalWarn;
+		}
 		rendererState.katexSuccess++;
 
 		if (element) {

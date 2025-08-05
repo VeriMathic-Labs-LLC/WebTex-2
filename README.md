@@ -185,6 +185,8 @@ This project is licensed under the MIT License - see the [LICENSE](LICENSE) file
 - **Enhanced Compatibility**: Automatic fallback when KaTeX encounters issues
 - **Improved Performance**: Optimized rendering pipeline
 - **Better Error Handling**: Graceful degradation between renderers
+- **Suppressed KaTeX missing-metrics warnings**: filters `console.warn` messages for unsupported glyphs
+- **Unicode regex lint compliance**: replaced `/[^\\x00-\\x7F]/g` with `/[^\\p{ASCII}]/gu`
 
 ### v2.0.0
 - Replaced MathJax with custom LaTeX renderer

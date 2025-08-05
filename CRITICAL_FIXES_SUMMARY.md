@@ -1,5 +1,7 @@
 # WebTeX Critical Fixes Summary
 
+**Version**: 2.1.0 • 2025-08-05
+
 ## Overview
 This document summarizes the critical fixes applied to address the major issues identified in the WebTeX extension. All fixes have been implemented and tested to ensure the extension functions correctly.
 
@@ -106,6 +108,20 @@ const fixedKatexCss = katexCssContent.replace(
 - All regex patterns are clean and properly formatted
 - No invisible characters detected in the codebase
 - All variable names and patterns are correctly spelled
+
+### 8. ✅ KaTeX Missing Metrics Warning
+**Issue**: KaTeX logs “No character metrics for '…'” warnings for unsupported glyphs.
+
+**Fix Applied**: Wrapped `katex.renderToString` with a temporary `console.warn` override to suppress these warnings.
+
+**File**: `src/app.js` lines 1039–1046
+
+### 9. ✅ Unicode Regex Lint Error
+**Issue**: Lint flagged control characters in the Unicode regex `/[^\x00-\x7F]/g`.
+
+**Fix Applied**: Replaced with Unicode property escape `/[^\p{ASCII}]/gu` to satisfy lint rules.
+
+**File**: `src/app.js` lines 1377–1384
 
 ## Additional Improvements Made
 
