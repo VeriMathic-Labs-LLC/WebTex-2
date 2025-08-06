@@ -3,6 +3,18 @@
 */
 
 class LatexRenderer {
+	static splitPatterns = [
+		{ regex: /\$\$([\s\S]+?)\$\$/g, type: "display" },
+		{ regex: /(?<!\$)\$([\s\S]+?)\$(?!\$)/g, type: "inline" },
+		{ regex: /\\\[([\s\S]+?)\\\]/g, type: "display" },
+		{ regex: /\\\(([\s\S]+?)\\\)/g, type: "inline" },
+	];
+	static delimiterStripRegexes = [
+		{ regex: /^(\$\$)([\s\S]*?)(\$\$)$/, replacement: "$2" },
+		{ regex: /^(\$)([\s\S]*?)(\$)$/, replacement: "$2" },
+		{ regex: /^(\\\[)([\s\S]*?)(\\\])$/, replacement: "$2" },
+		{ regex: /^(\\\()([\s\S]*?)(\\\))$/, replacement: "$2" },
+	];
 	constructor() {
 		this.isReady = true;
 		this.init();
@@ -39,49 +51,77 @@ class LatexRenderer {
 
 		let html = latex.trim();
 
-		// Remove LaTeX delimiters
-		if (html.startsWith("$$") && html.endsWith("$$")) {
-			html = html.substring(2, html.length - 2);
-		} else if (html.startsWith("$") && html.endsWith("$")) {
-			html = html.substring(1, html.length - 1);
+		// Strip delimiters
+		try {
+			this.constructor.delimiterStripRegexes.forEach(({ regex, replacement }) => {
+				html = html.replace(regex, replacement);
+			});
+		} catch (e) {
+			console.warn("Error stripping LaTeX delimiters:", e);
 		}
 
 		// Clean up any malformed expressions
-		html = this.cleanupMalformedLatex(html);
+		try {
+			html = this.cleanupMalformedLatex(html);
+		} catch (e) {
+			console.warn("Error cleaning malformed LaTeX:", e);
+		}
 
 		// Process complex expressions first (order matters)
-		html = this.processComplexExpressions(html);
+		try {
+			html = this.processComplexExpressions(html);
+		} catch (e) {
+			console.warn("Error processing complex expressions:", e);
+		}
 
 		// Then process basic symbols
-		html = this.processBasicSymbols(html);
+		try {
+			html = this.processBasicSymbols(html);
+		} catch (e) {
+			console.warn("Error processing basic symbols:", e);
+		}
 
 		return html;
 	}
 
 	// Clean up malformed LaTeX expressions
 	cleanupMalformedLatex(html) {
-		// Ensure balanced braces, else surface error
-		let balance = 0;
+		const stack = [];
+		const result = [];
 		for (let i = 0; i < html.length; i++) {
 			const char = html[i];
 			if (char === "{") {
-				balance++;
+				stack.push("{");
+				result.push(char);
 			} else if (char === "}") {
-				balance--;
-				if (balance < 0) {
-					throw new Error("Unmatched closing brace in LaTeX input");
+				if (stack.length > 0) {
+					stack.pop();
+					result.push(char);
+				} else {
+					throw new Error(`Unmatched closing brace in LaTeX input at position ${i}`);
 				}
+			} else {
+				result.push(char);
 			}
 		}
-		if (balance > 0) {
-			throw new Error("Missing closing brace(s) in LaTeX input");
+		while (stack.length > 0) {
+			result.push("}");
+			stack.pop();
 		}
-		return html;
+		return result.join("");
 	}
 
 	// Process complex LaTeX expressions
 	processComplexExpressions(html) {
 		try {
+			// Handle LaTeX environments (e.g., equation, align)
+			html = html.replace(
+				/\\begin\{([a-zA-Z*]+)\}([\s\S]*?)\\end\{\1\}/g,
+				(_match, env, content) => {
+					const inner = this.latexToHTML(content);
+					return `<div class='latex-env ${env}'>${inner}</div>`;
+				},
+			);
 			// Nuclear physics notation with text commands - handle these first
 			// Pattern: \text{_Z^A X} -> <span><sub>Z</sub><sup>A</sup>X</span>
 			html = html.replace(
@@ -133,7 +173,15 @@ class LatexRenderer {
 			html = html.replace(/([A-Za-z0-9])_([A-Za-z0-9]+)/g, "$1<sub>$2</sub>");
 			// --------------------------
 
-			// Fractions with complex numerators/denominators
+			// Nested fractions
+			const fracRe = /\\frac\{([^{}]+)\}\{([^{}]+)\}/g;
+			while (fracRe.test(html)) {
+				html = html.replace(fracRe, (_m, n, d) => {
+					const nn = this.processBasicSymbols(n);
+					const dd = this.processBasicSymbols(d);
+					return `<span style="display:inline-block;vertical-align:middle;text-align:center;margin:0 2px;"><span style="display:block;border-bottom:1px solid;line-height:1.2em;padding:0 2px;">${nn}</span><span style="display:block;line-height:1.2em;padding:0 2px;">${dd}</span></span>`;
+				});
+			}
 			html = html.replace(/\\frac\{([^}]+)\}\{([^}]+)\}/g, (_match, num, den) => {
 				const processedNum = this.processBasicSymbols(num);
 				const processedDen = this.processBasicSymbols(den);
@@ -143,7 +191,15 @@ class LatexRenderer {
         </span>`;
 			});
 
-			// Square roots with complex content
+			// Nested square roots
+			const sqrtRe = /\\sqrt\{([^{}]+)\}/g;
+			while (sqrtRe.test(html)) {
+				html = html.replace(
+					sqrtRe,
+					(_m, c) =>
+						`√<span style="text-decoration:overline;">${this.processBasicSymbols(c)}</span>`,
+				);
+			}
 			html = html.replace(/\\sqrt\{([^}]+)\}/g, (_match, content) => {
 				const processedContent = this.processBasicSymbols(content);
 				return `√<span style="text-decoration: overline;">${processedContent}</span>`;
@@ -235,259 +291,270 @@ class LatexRenderer {
 
 	processBasicSymbols(html) {
 		try {
-			const conversions = [
-				// Greek letters
-				{ pattern: /\\alpha/g, replacement: "α" },
-				{ pattern: /\\beta/g, replacement: "β" },
-				{ pattern: /\\gamma/g, replacement: "γ" },
-				{ pattern: /\\delta/g, replacement: "δ" },
-				{ pattern: /\\epsilon/g, replacement: "ε" },
-				{ pattern: /\\zeta/g, replacement: "ζ" },
-				{ pattern: /\\eta/g, replacement: "η" },
-				{ pattern: /\\theta/g, replacement: "θ" },
-				{ pattern: /\\iota/g, replacement: "ι" },
-				{ pattern: /\\kappa/g, replacement: "κ" },
-				{ pattern: /\\lambda/g, replacement: "λ" },
-				{ pattern: /\\mu/g, replacement: "μ" },
-				{ pattern: /\\nu/g, replacement: "ν" },
-				{ pattern: /\\xi/g, replacement: "ξ" },
-				{ pattern: /\\pi/g, replacement: "π" },
-				{ pattern: /\\rho/g, replacement: "ρ" },
-				{ pattern: /\\sigma/g, replacement: "σ" },
-				{ pattern: /\\tau/g, replacement: "τ" },
-				{ pattern: /\\upsilon/g, replacement: "υ" },
-				{ pattern: /\\phi/g, replacement: "φ" },
-				{ pattern: /\\chi/g, replacement: "χ" },
-				{ pattern: /\\psi/g, replacement: "ψ" },
-				{ pattern: /\\omega/g, replacement: "ω" },
+			const conversions =
+				this.constructor.cachedConversions ||
+				(this.constructor.cachedConversions = [
+					// Greek letters
+					{ pattern: /\\alpha/g, replacement: "α" },
+					{ pattern: /\\beta/g, replacement: "β" },
+					{ pattern: /\\gamma/g, replacement: "γ" },
+					{ pattern: /\\delta/g, replacement: "δ" },
+					{ pattern: /\\epsilon/g, replacement: "ε" },
+					{ pattern: /\\zeta/g, replacement: "ζ" },
+					{ pattern: /\\eta/g, replacement: "η" },
+					{ pattern: /\\theta/g, replacement: "θ" },
+					{ pattern: /\\iota/g, replacement: "ι" },
+					{ pattern: /\\kappa/g, replacement: "κ" },
+					{ pattern: /\\lambda/g, replacement: "λ" },
+					{ pattern: /\\mu/g, replacement: "μ" },
+					{ pattern: /\\nu/g, replacement: "ν" },
+					{ pattern: /\\xi/g, replacement: "ξ" },
+					{ pattern: /\\pi/g, replacement: "π" },
+					{ pattern: /\\rho/g, replacement: "ρ" },
+					{ pattern: /\\sigma/g, replacement: "σ" },
+					{ pattern: /\\tau/g, replacement: "τ" },
+					{ pattern: /\\upsilon/g, replacement: "υ" },
+					{ pattern: /\\phi/g, replacement: "φ" },
+					{ pattern: /\\chi/g, replacement: "χ" },
+					{ pattern: /\\psi/g, replacement: "ψ" },
+					{ pattern: /\\omega/g, replacement: "ω" },
 
-				// Uppercase Greek letters
-				{ pattern: /\\Alpha/g, replacement: "Α" },
-				{ pattern: /\\Beta/g, replacement: "Β" },
-				{ pattern: /\\Gamma/g, replacement: "Γ" },
-				{ pattern: /\\Delta/g, replacement: "Δ" },
-				{ pattern: /\\Epsilon/g, replacement: "Ε" },
-				{ pattern: /\\Zeta/g, replacement: "Ζ" },
-				{ pattern: /\\Eta/g, replacement: "Η" },
-				{ pattern: /\\Theta/g, replacement: "Θ" },
-				{ pattern: /\\Iota/g, replacement: "Ι" },
-				{ pattern: /\\Kappa/g, replacement: "Κ" },
-				{ pattern: /\\Lambda/g, replacement: "Λ" },
-				{ pattern: /\\Mu/g, replacement: "Μ" },
-				{ pattern: /\\Nu/g, replacement: "Ν" },
-				{ pattern: /\\Xi/g, replacement: "Ξ" },
-				{ pattern: /\\Pi/g, replacement: "Π" },
-				{ pattern: /\\Rho/g, replacement: "Ρ" },
-				{ pattern: /\\Sigma/g, replacement: "Σ" },
-				{ pattern: /\\Tau/g, replacement: "Τ" },
-				{ pattern: /\\Upsilon/g, replacement: "Υ" },
-				{ pattern: /\\Phi/g, replacement: "Φ" },
-				{ pattern: /\\Chi/g, replacement: "Χ" },
-				{ pattern: /\\Psi/g, replacement: "Ψ" },
-				{ pattern: /\\Omega/g, replacement: "Ω" },
+					// Uppercase Greek letters
+					{ pattern: /\\Alpha/g, replacement: "Α" },
+					{ pattern: /\\Beta/g, replacement: "Β" },
+					{ pattern: /\\Gamma/g, replacement: "Γ" },
+					{ pattern: /\\Delta/g, replacement: "Δ" },
+					{ pattern: /\\Epsilon/g, replacement: "Ε" },
+					{ pattern: /\\Zeta/g, replacement: "Ζ" },
+					{ pattern: /\\Eta/g, replacement: "Η" },
+					{ pattern: /\\Theta/g, replacement: "Θ" },
+					{ pattern: /\\Iota/g, replacement: "Ι" },
+					{ pattern: /\\Kappa/g, replacement: "Κ" },
+					{ pattern: /\\Lambda/g, replacement: "Λ" },
+					{ pattern: /\\Mu/g, replacement: "Μ" },
+					{ pattern: /\\Nu/g, replacement: "Ν" },
+					{ pattern: /\\Xi/g, replacement: "Ξ" },
+					{ pattern: /\\Pi/g, replacement: "Π" },
+					{ pattern: /\\Rho/g, replacement: "Ρ" },
+					{ pattern: /\\Sigma/g, replacement: "Σ" },
+					{ pattern: /\\Tau/g, replacement: "Τ" },
+					{ pattern: /\\Upsilon/g, replacement: "Υ" },
+					{ pattern: /\\Phi/g, replacement: "Φ" },
+					{ pattern: /\\Chi/g, replacement: "Χ" },
+					{ pattern: /\\Psi/g, replacement: "Ψ" },
+					{ pattern: /\\Omega/g, replacement: "Ω" },
 
-				// Math symbols
-				{ pattern: /\\times/g, replacement: "×" },
-				{ pattern: /\\div/g, replacement: "÷" },
-				{ pattern: /\\pm/g, replacement: "±" },
-				{ pattern: /\\mp/g, replacement: "∓" },
-				{ pattern: /\\leq/g, replacement: "≤" },
-				{ pattern: /\\geq/g, replacement: "≥" },
-				{ pattern: /\\neq/g, replacement: "≠" },
-				{ pattern: /\\approx/g, replacement: "≈" },
-				{ pattern: /\\equiv/g, replacement: "≡" },
-				{ pattern: /\\propto/g, replacement: "∝" },
-				{ pattern: /\\infty/g, replacement: "∞" },
-				{ pattern: /\\partial/g, replacement: "∂" },
-				{ pattern: /\\nabla/g, replacement: "∇" },
-				{ pattern: /\\sum/g, replacement: "∑" },
-				{ pattern: /\\prod/g, replacement: "∏" },
-				{ pattern: /\\int/g, replacement: "∫" },
-				{ pattern: /\\oint/g, replacement: "∮" },
-				{ pattern: /\\forall/g, replacement: "∀" },
-				{ pattern: /\\exists/g, replacement: "∃" },
-				{ pattern: /\\nexists/g, replacement: "∄" },
-				{ pattern: /\\notin/g, replacement: "∉" },
-				{ pattern: /\\in/g, replacement: "∈" },
-				{ pattern: /\\ni/g, replacement: "∋" },
-				{ pattern: /\\subseteq/g, replacement: "⊆" },
-				{ pattern: /\\supseteq/g, replacement: "⊇" },
-				{ pattern: /\\subset/g, replacement: "⊂" },
-				{ pattern: /\\supset/g, replacement: "⊃" },
-				{ pattern: /\\cup/g, replacement: "∪" },
-				{ pattern: /\\cap/g, replacement: "∩" },
-				{ pattern: /\\emptyset/g, replacement: "∅" },
-				{ pattern: /\\varnothing/g, replacement: "∅" },
-				{ pattern: /\\wedge/g, replacement: "∧" },
-				{ pattern: /\\vee/g, replacement: "∨" },
-				{ pattern: /\\neg/g, replacement: "¬" },
-				{ pattern: /\\oplus/g, replacement: "⊕" },
-				{ pattern: /\\otimes/g, replacement: "⊗" },
-				{ pattern: /\\perp/g, replacement: "⊥" },
-				{ pattern: /\\parallel/g, replacement: "∥" },
-				{ pattern: /\\angle/g, replacement: "∠" },
-				{ pattern: /\\measuredangle/g, replacement: "∡" },
-				{ pattern: /\\sphericalangle/g, replacement: "∢" },
-				{ pattern: /\\degree/g, replacement: "°" },
-				{ pattern: /\\prime/g, replacement: "′" },
-				{ pattern: /\\doubleprime/g, replacement: "″" },
-				{ pattern: /\\tripleprime/g, replacement: "‴" },
-				{ pattern: /\\backslash/g, replacement: "\\" },
-				{ pattern: /\\lbrace/g, replacement: "{" },
-				{ pattern: /\\rbrace/g, replacement: "}" },
-				{ pattern: /\\langle/g, replacement: "⟨" },
-				{ pattern: /\\rangle/g, replacement: "⟩" },
-				{ pattern: /\\lceil/g, replacement: "⌈" },
-				{ pattern: /\\rceil/g, replacement: "⌉" },
-				{ pattern: /\\lfloor/g, replacement: "⌊" },
-				{ pattern: /\\rfloor/g, replacement: "⌋" },
+					// Math symbols
+					{ pattern: /\\times/g, replacement: "×" },
+					{ pattern: /\\div/g, replacement: "÷" },
+					{ pattern: /\\pm/g, replacement: "±" },
+					{ pattern: /\\mp/g, replacement: "∓" },
+					{ pattern: /\\leq/g, replacement: "≤" },
+					{ pattern: /\\geq/g, replacement: "≥" },
+					{ pattern: /\\neq/g, replacement: "≠" },
+					{ pattern: /\\approx/g, replacement: "≈" },
+					{ pattern: /\\equiv/g, replacement: "≡" },
+					{ pattern: /\\propto/g, replacement: "∝" },
+					{ pattern: /\\infty/g, replacement: "∞" },
+					{ pattern: /\\partial/g, replacement: "∂" },
+					{ pattern: /\\nabla/g, replacement: "∇" },
+					{ pattern: /\\sum/g, replacement: "∑" },
+					{ pattern: /\\prod/g, replacement: "∏" },
+					{ pattern: /\\int/g, replacement: "∫" },
+					{ pattern: /\\oint/g, replacement: "∮" },
+					{ pattern: /\\forall/g, replacement: "∀" },
+					{ pattern: /\\exists/g, replacement: "∃" },
+					{ pattern: /\\nexists/g, replacement: "∄" },
+					{ pattern: /\\notin/g, replacement: "∉" },
+					{ pattern: /\\in/g, replacement: "∈" },
+					{ pattern: /\\ni/g, replacement: "∋" },
+					{ pattern: /\\subseteq/g, replacement: "⊆" },
+					{ pattern: /\\supseteq/g, replacement: "⊇" },
+					{ pattern: /\\subset/g, replacement: "⊂" },
+					{ pattern: /\\supset/g, replacement: "⊃" },
+					{ pattern: /\\cup/g, replacement: "∪" },
+					{ pattern: /\\cap/g, replacement: "∩" },
+					{ pattern: /\\emptyset/g, replacement: "∅" },
+					{ pattern: /\\varnothing/g, replacement: "∅" },
+					{ pattern: /\\wedge/g, replacement: "∧" },
+					{ pattern: /\\vee/g, replacement: "∨" },
+					{ pattern: /\\neg/g, replacement: "¬" },
+					{ pattern: /\\oplus/g, replacement: "⊕" },
+					{ pattern: /\\otimes/g, replacement: "⊗" },
+					{ pattern: /\\perp/g, replacement: "⊥" },
+					{ pattern: /\\parallel/g, replacement: "∥" },
+					{ pattern: /\\angle/g, replacement: "∠" },
+					{ pattern: /\\measuredangle/g, replacement: "∡" },
+					{ pattern: /\\sphericalangle/g, replacement: "∢" },
+					{ pattern: /\\degree/g, replacement: "°" },
+					{ pattern: /\\prime/g, replacement: "′" },
+					{ pattern: /\\doubleprime/g, replacement: "″" },
+					{ pattern: /\\tripleprime/g, replacement: "‴" },
+					{ pattern: /\\backslash/g, replacement: "\\" },
+					{ pattern: /\\lbrace/g, replacement: "{" },
+					{ pattern: /\\rbrace/g, replacement: "}" },
+					{ pattern: /\\langle/g, replacement: "⟨" },
+					{ pattern: /\\rangle/g, replacement: "⟩" },
+					{ pattern: /\\lceil/g, replacement: "⌈" },
+					{ pattern: /\\rceil/g, replacement: "⌉" },
+					{ pattern: /\\lfloor/g, replacement: "⌊" },
+					{ pattern: /\\rfloor/g, replacement: "⌋" },
 
-				// Arrows
-				{ pattern: /\\leftrightarrow/g, replacement: "↔" },
-				{ pattern: /\\leftarrow/g, replacement: "←" },
-				{ pattern: /\\rightarrow/g, replacement: "→" },
-				{ pattern: /\\Leftrightarrow/g, replacement: "⇔" },
-				{ pattern: /\\Leftarrow/g, replacement: "⇐" },
-				{ pattern: /\\Rightarrow/g, replacement: "⇒" },
-				{ pattern: /\\mapsto/g, replacement: "↦" },
-				{ pattern: /\\hookleftarrow/g, replacement: "↩" },
-				{ pattern: /\\hookrightarrow/g, replacement: "↪" },
-				{ pattern: /\\leftharpoonup/g, replacement: "↼" },
-				{ pattern: /\\rightharpoonup/g, replacement: "⇀" },
-				{ pattern: /\\leftharpoondown/g, replacement: "↽" },
-				{ pattern: /\\rightharpoondown/g, replacement: "⇁" },
-				{ pattern: /\\rightleftharpoons/g, replacement: "⇌" },
-				{ pattern: /\\leftrightharpoons/g, replacement: "⇋" },
-				{ pattern: /\\updownarrow/g, replacement: "↕" },
-				{ pattern: /\\uparrow/g, replacement: "↑" },
-				{ pattern: /\\downarrow/g, replacement: "↓" },
-				{ pattern: /\\Updownarrow/g, replacement: "⇕" },
-				{ pattern: /\\Uparrow/g, replacement: "⇑" },
-				{ pattern: /\\Downarrow/g, replacement: "⇓" },
-				{ pattern: /\\nearrow/g, replacement: "↗" },
-				{ pattern: /\\searrow/g, replacement: "↘" },
-				{ pattern: /\\swarrow/g, replacement: "↙" },
-				{ pattern: /\\nwarrow/g, replacement: "↖" },
+					// Arrows
+					{ pattern: /\\leftrightarrow/g, replacement: "↔" },
+					{ pattern: /\\leftarrow/g, replacement: "←" },
+					{ pattern: /\\rightarrow/g, replacement: "→" },
+					{ pattern: /\\Leftrightarrow/g, replacement: "⇔" },
+					{ pattern: /\\Leftarrow/g, replacement: "⇐" },
+					{ pattern: /\\Rightarrow/g, replacement: "⇒" },
+					{ pattern: /\\mapsto/g, replacement: "↦" },
+					{ pattern: /\\hookleftarrow/g, replacement: "↩" },
+					{ pattern: /\\hookrightarrow/g, replacement: "↪" },
+					{ pattern: /\\leftharpoonup/g, replacement: "↼" },
+					{ pattern: /\\rightharpoonup/g, replacement: "⇀" },
+					{ pattern: /\\leftharpoondown/g, replacement: "↽" },
+					{ pattern: /\\rightharpoondown/g, replacement: "⇁" },
+					{ pattern: /\\rightleftharpoons/g, replacement: "⇌" },
+					{ pattern: /\\leftrightharpoons/g, replacement: "⇋" },
+					{ pattern: /\\updownarrow/g, replacement: "↕" },
+					{ pattern: /\\uparrow/g, replacement: "↑" },
+					{ pattern: /\\downarrow/g, replacement: "↓" },
+					{ pattern: /\\Updownarrow/g, replacement: "⇕" },
+					{ pattern: /\\Uparrow/g, replacement: "⇑" },
+					{ pattern: /\\Downarrow/g, replacement: "⇓" },
+					{ pattern: /\\nearrow/g, replacement: "↗" },
+					{ pattern: /\\searrow/g, replacement: "↘" },
+					{ pattern: /\\swarrow/g, replacement: "↙" },
+					{ pattern: /\\nwarrow/g, replacement: "↖" },
 
-				// Nuclear physics specific - Improved accent handling
-				{
-					pattern: /\\bar\{([^}]+)\}/g,
-					replacement: (_match, content) => this.processAccent("bar", content),
-				},
-				{
-					pattern: /\\vec\{([^}]+)\}/g,
-					replacement: (_match, content) => this.processAccent("vec", content),
-				},
-				{
-					pattern: /\\hat\{([^}]+)\}/g,
-					replacement: (_match, content) => this.processAccent("hat", content),
-				},
-				{
-					pattern: /\\tilde\{([^}]+)\}/g,
-					replacement: (_match, content) => this.processAccent("tilde", content),
-				},
-				// Additional accent support
-				{
-					pattern: /\\acute\{([^}]+)\}/g,
-					replacement: (_match, content) => this.processAccent("acute", content),
-				},
-				{
-					pattern: /\\grave\{([^}]+)\}/g,
-					replacement: (_match, content) => this.processAccent("grave", content),
-				},
-				{
-					pattern: /\\breve\{([^}]+)\}/g,
-					replacement: (_match, content) => this.processAccent("breve", content),
-				},
-				{
-					pattern: /\\check\{([^}]+)\}/g,
-					replacement: (_match, content) => this.processAccent("check", content),
-				},
-				{
-					pattern: /\\dot\{([^}]+)\}/g,
-					replacement: (_match, content) => this.processAccent("dot", content),
-				},
-				{
-					pattern: /\\ddot\{([^}]+)\}/g,
-					replacement: (_match, content) => this.processAccent("ddot", content),
-				},
-				// Text mode accent commands (converted to math mode)
-				{
-					pattern: /\\u\{([^}]+)\}/g,
-					replacement: (_match, content) => this.processAccent("breve", content),
-				},
-				{
-					pattern: /\\v\{([^}]+)\}/g,
-					replacement: (_match, content) => this.processAccent("check", content),
-				},
-				{
-					pattern: /\\H\{([^}]+)\}/g,
-					replacement: (_match, content) => this.processAccent("ddot", content),
-				},
-				{
-					pattern: /\\k\{([^}]+)\}/g,
-					replacement: (_match, content) => this.processAccent("mathring", content),
-				},
-				{
-					pattern: /\\'\{([^}]+)\}/g,
-					replacement: (_match, content) => this.processAccent("acute", content),
-				},
-				{
-					pattern: /\\`\{([^}]+)\}/g,
-					replacement: (_match, content) => this.processAccent("grave", content),
-				},
-				{
-					pattern: /\\"\{([^}]+)\}/g,
-					replacement: (_match, content) => this.processAccent("ddot", content),
-				},
-				{
-					pattern: /\\~\{([^}]+)\}/g,
-					replacement: (_match, content) => this.processAccent("tilde", content),
-				},
-				{
-					pattern: /\\\^\{([^}]+)\}/g,
-					replacement: (_match, content) => this.processAccent("hat", content),
-				},
-				{
-					pattern: /\\\.\{([^}]+)\}/g,
-					replacement: (_match, content) => this.processAccent("dot", content),
-				},
-				{
-					pattern: /\\=\{([^}]+)\}/g,
-					replacement: (_match, content) => this.processAccent("bar", content),
-				},
-				{
-					pattern: /\\b\{([^}]+)\}/g,
-					replacement: (_match, content) => this.processAccent("bar", content),
-				},
+					// Nuclear physics specific - Improved accent handling
+					{
+						pattern: /\\bar\{([^}]+)\}/g,
+						replacement: (_match, content) => this.processAccent("bar", content),
+					},
+					{
+						pattern: /\\vec\{([^}]+)\}/g,
+						replacement: (_match, content) => this.processAccent("vec", content),
+					},
+					{
+						pattern: /\\hat\{([^}]+)\}/g,
+						replacement: (_match, content) => this.processAccent("hat", content),
+					},
+					{
+						pattern: /\\tilde\{([^}]+)\}/g,
+						replacement: (_match, content) => this.processAccent("tilde", content),
+					},
+					// Additional accent support
+					{
+						pattern: /\\acute\{([^}]+)\}/g,
+						replacement: (_match, content) => this.processAccent("acute", content),
+					},
+					{
+						pattern: /\\grave\{([^}]+)\}/g,
+						replacement: (_match, content) => this.processAccent("grave", content),
+					},
+					{
+						pattern: /\\breve\{([^}]+)\}/g,
+						replacement: (_match, content) => this.processAccent("breve", content),
+					},
+					{
+						pattern: /\\check\{([^}]+)\}/g,
+						replacement: (_match, content) => this.processAccent("check", content),
+					},
+					{
+						pattern: /\\dot\{([^}]+)\}/g,
+						replacement: (_match, content) => this.processAccent("dot", content),
+					},
+					{
+						pattern: /\\ddot\{([^}]+)\}/g,
+						replacement: (_match, content) => this.processAccent("ddot", content),
+					},
+					// Text mode accent commands (converted to math mode)
+					{
+						pattern: /\\u\{([^}]+)\}/g,
+						replacement: (_match, content) => this.processAccent("breve", content),
+					},
+					{
+						pattern: /\\v\{([^}]+)\}/g,
+						replacement: (_match, content) => this.processAccent("check", content),
+					},
+					{
+						pattern: /\\H\{([^}]+)\}/g,
+						replacement: (_match, content) => this.processAccent("ddot", content),
+					},
+					{
+						pattern: /\\k\{([^}]+)\}/g,
+						replacement: (_match, content) => this.processAccent("mathring", content),
+					},
+					{
+						pattern: /\\'\{([^}]+)\}/g,
+						replacement: (_match, content) => this.processAccent("acute", content),
+					},
+					{
+						pattern: /\\`\{([^}]+)\}/g,
+						replacement: (_match, content) => this.processAccent("grave", content),
+					},
+					{
+						pattern: /\\"\{([^}]+)\}/g,
+						replacement: (_match, content) => this.processAccent("ddot", content),
+					},
+					{
+						pattern: /\\~\{([^}]+)\}/g,
+						replacement: (_match, content) => this.processAccent("tilde", content),
+					},
+					{
+						pattern: /\\\^\{([^}]+)\}/g,
+						replacement: (_match, content) => this.processAccent("hat", content),
+					},
+					{
+						pattern: /\\\.\{([^}]+)\}/g,
+						replacement: (_match, content) => this.processAccent("dot", content),
+					},
+					{
+						pattern: /\\=\{([^}]+)\}/g,
+						replacement: (_match, content) => this.processAccent("bar", content),
+					},
+					{
+						pattern: /\\b\{([^}]+)\}/g,
+						replacement: (_match, content) => this.processAccent("bar", content),
+					},
 
-				// Units and measurements
-				{ pattern: /\\text\{m\}/g, replacement: "m" },
-				{ pattern: /\\text\{kg\}/g, replacement: "kg" },
-				{ pattern: /\\text\{MeV\}/g, replacement: "MeV" },
-				{ pattern: /\\text\{c\}/g, replacement: "c" },
+					// Units and measurements
+					{ pattern: /\\text\{m\}/g, replacement: "m" },
+					{ pattern: /\\text\{kg\}/g, replacement: "kg" },
+					{ pattern: /\\text\{MeV\}/g, replacement: "MeV" },
+					{ pattern: /\\text\{c\}/g, replacement: "c" },
 
-				// Special characters that might cause font issues
-				{ pattern: /\\frac\{1\}\{2\}/g, replacement: "½" },
-				{ pattern: /\\frac\{1\}\{3\}/g, replacement: "⅓" },
-				{ pattern: /\\frac\{2\}\{3\}/g, replacement: "⅔" },
-				{ pattern: /\\frac\{1\}\{4\}/g, replacement: "¼" },
-				{ pattern: /\\frac\{3\}\{4\}/g, replacement: "¾" },
-				{ pattern: /\\frac\{1\}\{5\}/g, replacement: "⅕" },
-				{ pattern: /\\frac\{2\}\{5\}/g, replacement: "⅖" },
-				{ pattern: /\\frac\{3\}\{5\}/g, replacement: "⅗" },
-				{ pattern: /\\frac\{4\}\{5\}/g, replacement: "⅘" },
-				{ pattern: /\\frac\{1\}\{6\}/g, replacement: "⅙" },
-				{ pattern: /\\frac\{5\}\{6\}/g, replacement: "⅚" },
-				{ pattern: /\\frac\{1\}\{8\}/g, replacement: "⅛" },
-				{ pattern: /\\frac\{3\}\{8\}/g, replacement: "⅜" },
-				{ pattern: /\\frac\{5\}\{8\}/g, replacement: "⅝" },
-				{ pattern: /\\frac\{7\}\{8\}/g, replacement: "⅞" },
+					// Special characters that might cause font issues
+					{ pattern: /\\frac\{1\}\{2\}/g, replacement: "½" },
+					{ pattern: /\\frac\{1\}\{3\}/g, replacement: "⅓" },
+					{ pattern: /\\frac\{2\}\{3\}/g, replacement: "⅔" },
+					{ pattern: /\\frac\{1\}\{4\}/g, replacement: "¼" },
+					{ pattern: /\\frac\{3\}\{4\}/g, replacement: "¾" },
+					{ pattern: /\\frac\{1\}\{5\}/g, replacement: "⅕" },
+					{ pattern: /\\frac\{2\}\{5\}/g, replacement: "⅖" },
+					{ pattern: /\\frac\{3\}\{5\}/g, replacement: "⅗" },
+					{ pattern: /\\frac\{4\}\{5\}/g, replacement: "⅘" },
+					{ pattern: /\\frac\{1\}\{6\}/g, replacement: "⅙" },
+					{ pattern: /\\frac\{5\}\{6\}/g, replacement: "⅚" },
+					{ pattern: /\\frac\{1\}\{8\}/g, replacement: "⅛" },
+					{ pattern: /\\frac\{3\}\{8\}/g, replacement: "⅜" },
+					{ pattern: /\\frac\{5\}\{8\}/g, replacement: "⅝" },
+					{ pattern: /\\frac\{7\}\{8\}/g, replacement: "⅞" },
 
-				// Remove remaining LaTeX commands that we don't handle
-				{ pattern: /\\[a-zA-Z]+\{[^}]*\}/g, replacement: "" },
-				{ pattern: /\\[a-zA-Z]+/g, replacement: "" },
-			];
+					// Remove remaining LaTeX commands that we don't handle
+					{ pattern: /\\[a-zA-Z]+\{[^}]*\}/g, replacement: "" },
+					{ pattern: /\\[a-zA-Z]+/g, replacement: "" },
+				]);
+
+			// Add word-boundary to simple macro patterns
+			this.constructor.cachedConversions.forEach((conv) => {
+				const src = conv.pattern.source;
+				// Only wrap simple macros like \alpha, \sum, etc.
+				if (/^\\[A-Za-z]+$/.test(src)) {
+					conv.pattern = new RegExp(`${src}\\b`, conv.pattern.flags);
+				}
+			});
 
 			conversions.forEach((conv) => {
 				try {
@@ -612,19 +679,14 @@ class LatexRenderer {
 	splitByLatexPatterns(text) {
 		try {
 			const parts = [];
-			// Patterns to match: $...$, $$...$$, \(...\), \[...\]
-			const patterns = [
-				{ regex: /\$\$([^$]+)\$\$/g, type: "display" },
-				{ regex: /\$([^$]+)\$/g, type: "inline" },
-				{ regex: /\\\[([\s\S]+?)\\\]/g, type: "display" },
-				{ regex: /\\\(([\s\S]+?)\\\)/g, type: "inline" },
-			];
+			const patterns = this.constructor.splitPatterns;
 
 			let lastIndex = 0;
 			// Find all matches
 			const matches = [];
 			patterns.forEach((pattern) => {
-				const regex = new RegExp(pattern.regex.source, "g");
+				const regex = pattern.regex;
+				regex.lastIndex = 0;
 				let match;
 				while ((match = regex.exec(text)) !== null) {
 					matches.push({

@@ -45,24 +45,9 @@
 
 
 
-Regex‐heavy conversions on every render
-processComplexExpressions
- + 
-processBasicSymbols
- run 100s of regex passes per render → slow on large documents.
-No caching of compiled regex or conversion map.
-No word-boundaries on symbol replacements
-Converting /\\sum/g will also rewrite \summation, etc. → false positives.
-Minimal LaTeX support
-No handling of \frac, \sqrt, \begin{…}/\end{…}, user macros, accents outside a handful, etc.
-No environment parsing or nested math.
-Error handling is too coarse
-Top-level try/catch in 
-renderLatex
- & 
-renderAllLatex
- simply falls back to plaintext.
-Inner errors are swallowed with console.warn → silent failures.
+
+
+
 2. src/domain-utils.js
 Redundant and oversimplified logic
 Two parts.length > 2 checks in normalization.
@@ -72,6 +57,7 @@ IPv4 regex ^\d+\.\d+\.\d+\.\d+$ won’t catch ports (:8080) or IPv6.
 domainMatches
  duplicates exact-match check
 Clean up to one branch.
+
 3. src/app.js
 safeRender
  is never defined
@@ -94,10 +80,12 @@ disableRendering
  isn’t called.
 Timezone mismatch in logs
 Uses toISOString() (UTC) but slices as if local time.
+
 4. Build, docs & testing
 No unit/integration tests for any parser or domain logic.
 No documentation listing supported LaTeX commands or known limitations.
 Entire codebase is JavaScript; migrating to TypeScript would catch many of these errors at compile-time.
+
 Recommended next steps
 Fix 
 safeRender
