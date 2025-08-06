@@ -36,17 +36,19 @@ const COMMON_SUBDOMAINS = [
 export function normalizeDomain(hostname) {
 	if (!hostname) return "";
 
-	// Handle localhost and IP addresses
-	if (hostname === "localhost" || /^\d+\.\d+\.\d+\.\d+$/.test(hostname)) {
-		return hostname;
+	// Handle localhost, IPv4, and IPv6 (with optional port)
+	const ipv4 = /^\d{1,3}(?:\.\d{1,3}){3}$/;
+	const ipv6 = /^[0-9a-f:]+$/;
+	if (host === "localhost" || ipv4.test(host) || ipv6.test(host)) {
+		return host;
 	}
 
 	// Split into parts
-	const parts = hostname.split(".");
+	const parts = hostname.toLowerCase().split(".");
 
 	// If we have 2 or fewer parts, return as-is
 	if (parts.length <= 2) {
-		return hostname;
+		return parts.join(".");
 	}
 
 	// Check if the first part is a common subdomain
@@ -127,24 +129,14 @@ export function normalizeDomain(hostname) {
  */
 export function domainMatches(hostname, normalizedDomain) {
 	if (!hostname || !normalizedDomain) return false;
-
-	// Handle exact matches
-	if (hostname === normalizedDomain) return true;
-
-	// Handle localhost and IP addresses
-	if (hostname === "localhost" || /^\d+\.\d+\.\d+\.\d+$/.test(hostname)) {
-		return hostname === normalizedDomain;
-	}
-
-	// Check if the hostname ends with the normalized domain
-	// This handles subdomains like www.example.com matching example.com
-	// But we need to be careful about exact matches to avoid false positives
-	if (hostname === normalizedDomain) {
-		return true;
-	}
-
-	// Check if it's a subdomain (must end with .domain)
-	return hostname.endsWith(`.${normalizedDomain}`);
+	// Normalize and strip port/brackets, lowercase
+	const host = hostname
+		.toLowerCase()
+		.replace(/:\d+$/, "")
+		.replace(/^\[|\]$/g, "");
+	const norm = normalizedDomain.toLowerCase();
+	// Exact match or subdomain match
+	return host === norm || host.endsWith(`.${norm}`);
 }
 
 /**

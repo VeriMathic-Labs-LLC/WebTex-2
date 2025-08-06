@@ -42,22 +42,6 @@
 - [ ] Consider migration to TypeScript for stronger type guarantees
 
 
-
-
-
-
-
-
-2. src/domain-utils.js
-Redundant and oversimplified logic
-Two parts.length > 2 checks in normalization.
-The “country-tld” array logic applies to all 3+ part domains, even if subdomain isn’t common.
-IP and localhost handling
-IPv4 regex ^\d+\.\d+\.\d+\.\d+$ won’t catch ports (:8080) or IPv6.
-domainMatches
- duplicates exact-match check
-Clean up to one branch.
-
 3. src/app.js
 safeRender
  is never defined
