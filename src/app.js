@@ -295,10 +295,22 @@ const LOG_LEVEL = {
 	DEBUG: 4,
 };
 
-const CURRENT_LOG_LEVEL = LOG_LEVEL.WARN; // Show WARN and ERROR by default
+let CURRENT_LOG_LEVEL = LOG_LEVEL.WARN; // Show WARN and ERROR by default
+// Sync with global window setting if present, and initialize it otherwise.
+if (typeof window !== "undefined") {
+	if (typeof window.WEBTEX_LOG_LEVEL === "number") {
+		CURRENT_LOG_LEVEL = window.WEBTEX_LOG_LEVEL;
+	} else {
+		window.WEBTEX_LOG_LEVEL = CURRENT_LOG_LEVEL;
+	}
+}
 
 function log(level, ...args) {
-	if (level <= CURRENT_LOG_LEVEL) {
+	const effectiveLevel =
+		typeof window !== "undefined" && typeof window.WEBTEX_LOG_LEVEL === "number"
+			? window.WEBTEX_LOG_LEVEL
+			: CURRENT_LOG_LEVEL;
+	if (level <= effectiveLevel) {
 		const now = new Date();
 		const timestamp = `${now.getHours().toString().padStart(2, "0")}:${now.getMinutes().toString().padStart(2, "0")}:${now.getSeconds().toString().padStart(2, "0")}.${now.getMilliseconds().toString().padStart(3, "0")}`;
 		const prefix = `[WebTeX ${timestamp}]`;
@@ -325,6 +337,7 @@ function log(level, ...args) {
 // Expose logging controls globally for debugging
 window.WebTeXLogging = {
 	setLevel: (level) => {
+		CURRENT_LOG_LEVEL = level;
 		window.WEBTEX_LOG_LEVEL = level;
 		console.log(
 			`[WebTeX] Log level set to ${Object.keys(LOG_LEVEL)[Object.values(LOG_LEVEL).indexOf(level)]}`,
@@ -396,17 +409,16 @@ function reportKaTeXError(tex, error) {
 // Enhanced Custom LaTeX Parser for edge cases
 
 function cleanupEmptyBraces(str) {
-	str = str.replace(/\{\}\{\}\{\}\^/g, "^");
-	str = str.replace(/\{\}\{\}\^/g, "^");
-	str = str.replace(/\{\}\^/g, "^");
-	str = str.replace(/\{\}\{\}(?!\^)/g, "");
-	str = str.replace(/\{\}\{\}\{\}(?!\^)/g, "");
-	str = str.replace(/\{\}\{\}\{\}\{\}(?!\^)/g, "");
-	str = str.replace(/\{\}\{\}/g, "");
-	// Remove single empty braces not followed by ^ ONLY if they are not part of a required command argument (e.g., \\text{})
+	// Preserve empty base before superscripts/subscripts (e.g., {}^{A}, {}_{Z}).
+	// Only remove empty groups when they are NOT immediately (optionally after whitespace)
+	// followed by ^ or _.
+	str = str.replace(/\{\}\{\}\{\}\{\}(?!\s*[\^_])/g, "");
+	str = str.replace(/\{\}\{\}\{\}(?!\s*[\^_])/g, "");
+	str = str.replace(/\{\}\{\}(?!\s*[\^_])/g, "");
+	// Remove single empty braces not followed by ^ or _ ONLY if they are not part of a required command argument (e.g., \\text{})
 	// We achieve this by ensuring the braces are NOT immediately preceded by a backslash followed by letters (a LaTeX command)
-	// Example kept: "\\text{}" => should stay. Example removed: "{}^2" => becomes "^2".
-	str = str.replace(/(^|[^\\a-zA-Z])\{\}(?!\^)/g, "$1");
+	// Example kept: "\\text{}" => should stay. Example removed: stray "{}" not used as a base.
+	str = str.replace(/(^|[^\\a-zA-Z])\{\}(?!\s*[\^_])/g, "$1");
 	return str;
 }
 
@@ -527,6 +539,8 @@ class CustomLatexParser {
 
 		// Process text wrappers AFTER nuclear notation
 		simplified = this.processTextWrappers(simplified);
+		// Run nuclear normalization again to catch math unwrapped from \text{}
+		simplified = this.processNuclearNotation(simplified);
 		simplified = this.processTypoFixes(simplified);
 
 		// Handle matrix environments
@@ -647,12 +661,21 @@ class CustomLatexParser {
 			} else if (char === "^" || char === "_") {
 				fixed += char;
 				i++;
-				const argResult = this.getNextArgument(str, i);
-				if (argResult) {
-					fixed += `{${argResult.value}}`;
-					i += argResult.length;
-				} else {
+				// Peek next non-space character to avoid consuming another ^/_ as the argument
+				let k = i;
+				while (k < str.length && /\s/.test(str[k])) k++;
+				if (k >= str.length || str[k] === "^" || str[k] === "_") {
+					// Missing argument or immediately followed by another super/subscript: insert empty group
 					fixed += "{}";
+					// Do not advance i; the next loop iteration will handle the following ^/_
+				} else {
+					const argResult = this.getNextArgument(str, i);
+					if (argResult) {
+						fixed += `{${argResult.value}}`;
+						i += argResult.length;
+					} else {
+						fixed += "{}";
+					}
 				}
 			} else {
 				fixed += char;
@@ -784,9 +807,41 @@ class CustomLatexParser {
 		// Star notation for excited states
 		str = str.replace(/\\text\{([^}]+)\*\}/g, "\\text{$1}^*");
 
-		// Handle Z^A and _Z^A without \text{}
+		// Handle Z^A and _Z^A without \text{} (single-letter forms)
 		str = str.replace(/([A-Z])\^([A-Z])\s+([A-Z])/g, "{}^{$2}\\text{$3}");
 		str = str.replace(/_([A-Z])\^([A-Z])\s+([A-Z])/g, "{}^{$2}_{$1}\\text{$3}");
+
+		// Handle numeric Z/A with proper element symbols (e.g., _3^7 Li, ^7_3 Li)
+		str = str.replace(
+			/_\s*\{?(\d+)\}?\s*\^\s*\{?(\d+)\}?\s+([A-Z][a-z]?)/g,
+			"{}^{$2}_{$1}\\text{$3}",
+		);
+		str = str.replace(
+			/\^\s*\{?(\d+)\}?\s*_\s*\{?(\d+)\}?\s+([A-Z][a-z]?)/g,
+			"{}^{$1}_{$2}\\text{$3}",
+		);
+
+		// Normalize cases like _^{A}\text{N} (missing Z) -> {}^{A}\text{N}
+		str = str.replace(
+			/_\s*(?:\{\s*\})?\s*\^\s*\{([^}]+)\}\s*\\text\{([^}]+)\}/g,
+			"{}^{$1}\\text{$2}",
+		);
+
+		// Normalize _{Z}^{A}\text{N} or ^{A}_{Z}\text{N} (ensure proper base)
+		str = str.replace(
+			/_\s*\{([^}]+)\}\s*\^\s*\{([^}]+)\}\s*\\text\{([^}]+)\}/g,
+			"{}^{$2}_{$1}\\text{$3}",
+		);
+
+		// General token forms with hyphens/symbols: _{Z-1}^A N and ^A_{Z-1} N
+		str = str.replace(
+			/_\s*\{?([^{}\s^_]+)\}?\s*\^\s*\{?([^{}\s^_]+)\}?\s+([A-Z][a-z]?['*]?)/g,
+			"{}^{$2}_{$1}\\text{$3}",
+		);
+		str = str.replace(
+			/\^\s*\{?([^{}\s^_]+)\}?\s*_\s*\{?([^{}\s^_]+)\}?\s+([A-Z][a-z]?['*]?)/g,
+			"{}^{$1}_{$2}\\text{$3}",
+		);
 
 		// Fix common malformed nuclear notation patterns
 		// Handle cases like {}^{A}\text{N} -> {}^{A}\text{N}
@@ -844,32 +899,67 @@ class CustomLatexParser {
 	}
 
 	processTextWrappers(str) {
-		// Enhanced \text{} processing - avoid nesting \mathrm inside \text
-		return str.replace(/\\text\{([^{}]+)\}/g, (_m, inner) => {
-			// Special patterns that should be kept in \text{} as-is
-			const keepPatterns = [
-				/^[A-Z]'?$/, // Single uppercase letter possibly with prime (e.g., N, N')
-				/^[a-z]'?$/, // Single lowercase letter possibly with prime
-				/^(He|Li|Be|C|N|O|F|Ne|Na|Mg|Al|Si|P|S|Cl|Ar|K|Ca)$/, // Chemical elements
-				/^e\^[+-]$/, // Electron/positron notation
-				/^\w+['*]?$/, // Words with possible prime or star
-			];
-
-			// Check if we should keep \text{} as-is
-			for (const pattern of keepPatterns) {
-				if (pattern.test(inner)) {
-					return `\\text{${inner}}`; // Keep as \text{} to avoid nesting issues
+		// Parse-balanced \text{...} so we can unwrap even when nested braces are inside
+		let out = "";
+		let i = 0;
+		while (i < str.length) {
+			if (str[i] === "\\") {
+				const slice = str.slice(i);
+				const m = slice.match(/^\\text(?=\s*\{)/);
+				if (m) {
+					// Skip command and read its braced argument
+					i += m[0].length;
+					const arg = this.getNextArgument(str, i);
+					if (arg) {
+						const inner = arg.value;
+						i += arg.length;
+						// Decide whether to keep or unwrap
+						const keepPatterns = [
+							/^[A-Z]'?$/, // N, N'
+							/^[a-z]'?$/,
+							/^(He|Li|Be|C|N|O|F|Ne|Na|Mg|Al|Si|P|S|Cl|Ar|K|Ca)$/,
+							/^e\^[+-]$/, // e^-, e^+
+							/^\w+['*]?$/,
+						];
+						let keep = false;
+						for (const p of keepPatterns) {
+							if (p.test(inner)) {
+								keep = true;
+								break;
+							}
+						}
+						if (keep) {
+							out += `\\text{${inner}}`;
+							continue;
+						}
+						// If clearly mathy, unwrap so KaTeX parses it
+						if (
+							/[\\^_]|→/.test(inner) ||
+							/\\(to|nu|gamma|overline|bar|frac|int|sum|mathrm|mathbf|text)\b/.test(inner)
+						) {
+							out += inner;
+							continue;
+						}
+						// Simple content: unwrap
+						if (/^[A-Za-z0-9_+\-*/=().,\s]+$/.test(inner)) {
+							out += inner;
+							continue;
+						}
+						// Default: keep as \text{}
+						out += `\\text{${inner}}`;
+						continue;
+					} else {
+						// Malformed \text without a braced argument
+						out += "\\text{}";
+						continue;
+					}
 				}
 			}
-
-			// For simple math expressions, remove \text{} wrapper
-			if (/^[A-Za-z0-9_+\-*/=().,\s]+$/.test(inner)) {
-				return inner;
-			}
-
-			// For everything else, keep as \text{} to avoid nesting \mathrm inside \text
-			return `\\text{${inner}}`;
-		});
+			// Fallback: copy char
+			out += str[i];
+			i++;
+		}
+		return out;
 	}
 
 	processTypoFixes(str) {
@@ -1105,6 +1195,30 @@ function findMathExpressions(root) {
 					(node.parentElement.classList.contains("webtex-math-container") &&
 						node.parentElement.classList.contains("webtex-failed-render")))
 			) {
+				return NodeFilter.FILTER_REJECT;
+			}
+
+			// Skip inside code-like and input elements where we should not render math
+			const tag = node.parentElement?.tagName;
+			if (
+				tag &&
+				[
+					"SCRIPT",
+					"STYLE",
+					"TEXTAREA",
+					"PRE",
+					"CODE",
+					"NOSCRIPT",
+					"INPUT",
+					"SELECT",
+					"BUTTON",
+				].includes(tag)
+			) {
+				return NodeFilter.FILTER_REJECT;
+			}
+
+			// Skip editable areas to avoid interfering with user typing
+			if (node.parentElement && nodeIsEditable(node.parentElement)) {
 				return NodeFilter.FILTER_REJECT;
 			}
 			return NodeFilter.FILTER_ACCEPT;
