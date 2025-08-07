@@ -807,24 +807,41 @@ class CustomLatexParser {
 		// Star notation for excited states
 		str = str.replace(/\\text\{([^}]+)\*\}/g, "\\text{$1}^*");
 
-		// Handle Z^A and _Z^A without \text{} (single-letter forms)
-		str = str.replace(/([A-Z])\^([A-Z])\s+([A-Z])/g, "{}^{$2}\\text{$3}");
-		str = str.replace(/_([A-Z])\^([A-Z])\s+([A-Z])/g, "{}^{$2}_{$1}\\text{$3}");
+		// Handle Z^A and _Z^A without \text{} (explicit literal Z to avoid false positives)
+		// Ensure we keep Z as a subscript in the canonical form (always brace the subscript)
+		str = str.replace(
+			/_Z\s*\^\s*\{?([^{}\s^_]+)\}?\s*([A-Z][a-z]?['*]?)/g,
+			"{}^{$1}_{Z}\\text{$2}",
+		);
+		str = str.replace(/Z\s*\^\s*\{?([^{}\s^_]+)\}?\s*([A-Z][a-z]?['*]?)/g, "{}^{$1}_{Z}\\text{$2}");
 
 		// Handle numeric Z/A with proper element symbols (e.g., _3^7 Li, ^7_3 Li)
 		str = str.replace(
-			/_\s*\{?(\d+)\}?\s*\^\s*\{?(\d+)\}?\s+([A-Z][a-z]?)/g,
+			/_\s*\{?(\d+)\}?\s*\^\s*\{?(\d+)\}?\s*([A-Z][a-z]?)/g,
 			"{}^{$2}_{$1}\\text{$3}",
 		);
 		str = str.replace(
-			/\^\s*\{?(\d+)\}?\s*_\s*\{?(\d+)\}?\s+([A-Z][a-z]?)/g,
+			/\^\s*\{?(\d+)\}?\s*_\s*\{?(\d+)\}?\s*([A-Z][a-z]?)/g,
 			"{}^{$1}_{$2}\\text{$3}",
 		);
 
-		// Normalize cases like _^{A}\text{N} (missing Z) -> {}^{A}\text{N}
+		// Handle bare-number then caret: 2^4 He -> {}^{4}_{2}\text{He}
+		str = str.replace(/(\b\d+)\s*\^\s*\{?(\d+)\}?\s*([A-Z][a-z]?['*]?)/g, "{}^{$2}_{$1}\\text{$3}");
+
+		// Handle braced-number then caret: {88}^{226}Ra -> {}^{226}_{88}\text{Ra}
 		str = str.replace(
-			/_\s*(?:\{\s*\})?\s*\^\s*\{([^}]+)\}\s*\\text\{([^}]+)\}/g,
-			"{}^{$1}\\text{$2}",
+			/\{\s*(\d+)\s*\}\s*\^\s*\{?(\d+)\}?\s*([A-Z][a-z]?['*]?)/g,
+			"{}^{$2}_{$1}\\text{$3}",
+		);
+
+		// Cleanup: stray leading '_' before an already-canonical group (prevents double subscript)
+		str = str.replace(
+			/_\s*\{\}\s*\^\{([^}]+)\}\s*_\{?Z\}?\s*\\text\{([^}]+)\}/g,
+			"{}^{$1}_{Z}\\text{$2}",
+		);
+		str = str.replace(
+			/_\s*\{\}\s*\^\{([^}]+)\}\s*_Z\s*\\text\{([^}]+)\}/g,
+			"{}^{$1}_{Z}\\text{$2}",
 		);
 
 		// Normalize _{Z}^{A}\text{N} or ^{A}_{Z}\text{N} (ensure proper base)
@@ -835,12 +852,42 @@ class CustomLatexParser {
 
 		// General token forms with hyphens/symbols: _{Z-1}^A N and ^A_{Z-1} N
 		str = str.replace(
-			/_\s*\{?([^{}\s^_]+)\}?\s*\^\s*\{?([^{}\s^_]+)\}?\s+([A-Z][a-z]?['*]?)/g,
+			/_\s*\{?([^{}\s^_]+)\}?\s*\^\s*\{?([^{}\s^_]+)\}?\s*([A-Z][a-z]?['*]?)/g,
 			"{}^{$2}_{$1}\\text{$3}",
 		);
 		str = str.replace(
-			/\^\s*\{?([^{}\s^_]+)\}?\s*_\s*\{?([^{}\s^_]+)\}?\s+([A-Z][a-z]?['*]?)/g,
+			/\^\s*\{?([^{}\s^_]+)\}?\s*_\s*\{?([^{}\s^_]+)\}?\s*([A-Z][a-z]?['*]?)/g,
 			"{}^{$1}_{$2}\\text{$3}",
+		);
+		// Remove stray leading '_' before an already-canonical group (any subscript token, not just Z)
+		// Example: _{}^{A}_{Z}\text{N} -> {}^{A}_{Z}\text{N}
+		str = str.replace(
+			/_\s*(?:\{\}\s*)+\^\{([^}]+)\}\s*_\{([^}]+)\}\s*\\text\{([^}]+)\}/g,
+			"{}^{$1}_{$2}\\text{$3}",
+		);
+		// Also handle unbraced subscript tokens: _Z, _n, etc.
+		str = str.replace(
+			/_\s*(?:\{\}\s*)+\^\{([^}]+)\}\s*_([^\s{}^_]+)\s*\\text\{([^}]+)\}/g,
+			(_m, A, sub, el) => `{}^{${A}}_{${sub}}\\text{${el}}`,
+		);
+		// And handle a stray leading underscore before a superscript-only nuclear form: _{}^{A}\text{N} -> {}^{A}\text{N}
+		str = str.replace(/_\s*(?:\{\}\s*)+\^\{([^}]+)\}\s*\\text\{([^}]+)\}/g, "{}^{$1}\\text{$2}");
+
+		// Fix base-level double subscript: {}^{A}_{Z}_{x}\\text{N} -> {}^{A}_{Z}\\text{N}_{x}
+		// If the second subscript equals the first, drop it entirely
+		str = str.replace(
+			/\{\}\s*\^\{([^}]+)\}\s*_\{\s*([^}]+)\s*\}\s*_\{\s*\2\s*\}\s*\\text\{([^}]+)\}/g,
+			"{}^{$1}_{$2}\\text{$3}",
+		);
+		// Generic: move the second (different) subscript to the element
+		str = str.replace(
+			/\{\}\s*\^\{([^}]+)\}\s*_\{\s*([^}]+)\s*\}\s*_\{\s*([^}]+)\s*\}\s*\\text\{([^}]+)\}/g,
+			(_m, A, sub1, sub2, el) => `{}^{${A}}_{${sub1}}\\text{${el}}_{${sub2}}`,
+		);
+		// Variant where the second subscript is unbraced: {}^{A}_{Z}_x\\text{N} -> {}^{A}_{Z}\\text{N}_{x}
+		str = str.replace(
+			/\{\}\s*\^\{([^}]+)\}\s*_\{\s*([^}]+)\s*\}\s*_([^\s{}^_]+)\s*\\text\{([^}]+)\}/g,
+			(_m, A, sub1, sub2, el) => `{}^{${A}}_{${sub1}}\\text{${el}}_{${sub2}}`,
 		);
 
 		// Fix common malformed nuclear notation patterns
