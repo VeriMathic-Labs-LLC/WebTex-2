@@ -281,10 +281,10 @@ function removeCSS() {
 /* -------------------------------------------------- */
 // Reusable entity decoder for performance
 function decodeHTMLEntities(text) {
-	// Use the browser's built-in HTML parser for safe and complete HTML entity decoding
-	const textarea = document.createElement("textarea");
-	textarea.innerHTML = text;
-	return textarea.value;
+	// Decode using safe div.textContent
+	const div = document.createElement("div");
+	div.innerHTML = text;
+	return div.textContent;
 }
 /* -------------------------------------------------- */
 // Logging system for debugging and error tracking
@@ -299,7 +299,8 @@ const CURRENT_LOG_LEVEL = LOG_LEVEL.WARN; // Show WARN and ERROR by default
 
 function log(level, ...args) {
 	if (level <= CURRENT_LOG_LEVEL) {
-		const timestamp = new Date().toISOString().substring(11, 23); // HH:MM:SS.mmm
+		const now = new Date();
+		const timestamp = `${now.getHours().toString().padStart(2, "0")}:${now.getMinutes().toString().padStart(2, "0")}:${now.getSeconds().toString().padStart(2, "0")}.${now.getMilliseconds().toString().padStart(3, "0")}`;
 		const prefix = `[WebTeX ${timestamp}]`;
 
 		switch (level) {
@@ -339,17 +340,16 @@ window.WebTeXLogging = {
 
 // Global error handler for WebTeX
 window.addEventListener("error", (event) => {
-	if (event.filename?.includes("app.js")) {
-		log(LOG_LEVEL.ERROR, "Unhandled WebTeX error:", event.error);
-		console.error("[WebTeX] Global error caught:", {
-			message: event.message,
-			filename: event.filename,
-			lineno: event.lineno,
-			colno: event.colno,
-			error: event.error,
-			stack: event.error?.stack,
-		});
-	}
+	// catch all WebTeX errors
+	log(LOG_LEVEL.ERROR, "Unhandled WebTeX error:", event.error);
+	console.error("[WebTeX] Global error caught:", {
+		message: event.message,
+		filename: event.filename,
+		lineno: event.lineno,
+		colno: event.colno,
+		error: event.error,
+		stack: event.error?.stack,
+	});
 });
 
 // Global promise rejection handler
@@ -1575,32 +1575,36 @@ function disableRendering() {
 	}
 
 	// Restore original DOM structure completely
-	document.querySelectorAll(".webtex-math-container").forEach((container) => {
-		// Find all original text nodes and math elements within
-		const textParts = [];
-		container.childNodes.forEach((node) => {
-			if (node.nodeType === 3) {
-				// Text node
-				textParts.push(node.textContent);
-			} else if (node.dataset?.originalText) {
-				textParts.push(node.dataset.originalText);
-			} else {
-				textParts.push(node.textContent || "");
+	document
+		.querySelectorAll(
+			".webtex-math-container, .webtex-processed, .webtex-inline-math, .webtex-display-math",
+		)
+		.forEach((container) => {
+			// Find all original text nodes and math elements within
+			const textParts = [];
+			container.childNodes.forEach((node) => {
+				if (node.nodeType === 3) {
+					// Text node
+					textParts.push(node.textContent);
+				} else if (node.dataset?.originalText) {
+					textParts.push(node.dataset.originalText);
+				} else {
+					textParts.push(node.textContent || "");
+				}
+			});
+
+			// Replace container with original text node
+			const originalText = textParts.join("");
+			const textNode = document.createTextNode(originalText);
+			if (container.parentNode) {
+				container.parentNode.replaceChild(textNode, container);
 			}
 		});
-
-		// Replace container with original text node
-		const originalText = textParts.join("");
-		const textNode = document.createTextNode(originalText);
-		if (container.parentNode) {
-			container.parentNode.replaceChild(textNode, container);
-		}
-	});
 
 	// Clean up any remaining WebTeX elements
 	document
 		.querySelectorAll(
-			".webtex-katex-rendered, .webtex-custom-rendered, .webtex-math, .webtex-display, .webtex-inline, .webtex-error-fallback, .webtex-custom-fallback",
+			".webtex-katex-rendered, .webtex-custom-rendered, .webtex-math, .webtex-display, .webtex-inline-math, .webtex-display-math, .webtex-processed, .webtex-error-fallback, .webtex-custom-fallback",
 		)
 		.forEach((el) => {
 			if (el.dataset.originalText) {
@@ -1614,6 +1618,9 @@ function disableRendering() {
 		});
 
 	removeCSS(); // Remove injected styles
+	// Clear global state to prevent memory leaks
+	delete window.rendererState;
+	delete window.webtexErrors;
 }
 
 /* -------------------------------------------------- */

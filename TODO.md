@@ -42,28 +42,7 @@
 - [ ] Consider migration to TypeScript for stronger type guarantees
 
 
-3. src/app.js
-safeRender
- is never defined
-js
-await safeRender();  // ReferenceError → app crashes on load
-Likely the single biggest crash cause.
-Global error handler filter is brittle
-Checks event.filename.includes("app.js")—won’t catch errors in minified/bundled names.
-MutationObserver overload
-Observes characterData + subtree on body → floods on every DOM/text change. Debounce helps, but still risky on large sites.
-disableRendering
- targets the wrong selector
-Queries .webtex-math-container but all renders use .webtex-processed, .webtex-inline-math, etc. → original text never restored.
-decodeHTMLEntities
- XSS risk
-Setting textarea.innerHTML = text without sanitization can execute <script> if present.
-Memory leaks & globals
-injectedStylesheets, observer, rendererState, webtexErrors never fully cleaned up if 
-disableRendering
- isn’t called.
-Timezone mismatch in logs
-Uses toISOString() (UTC) but slices as if local time.
+
 
 4. Build, docs & testing
 No unit/integration tests for any parser or domain logic.
