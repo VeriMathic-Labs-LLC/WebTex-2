@@ -1632,9 +1632,44 @@ async function safeRender(root = document.body) {
 }
 
 /* -------------------------------------------------- */
+// DOM readiness helper: wait until document.body exists
+async function waitForDocumentReady() {
+	if (
+		document.body &&
+		(document.readyState === "interactive" || document.readyState === "complete")
+	) {
+		return;
+	}
+
+	await new Promise((resolve) => {
+		let resolved = false;
+		let mo = null;
+		const done = () => {
+			if (resolved) return;
+			if (!document.body) return;
+			resolved = true;
+			document.removeEventListener("DOMContentLoaded", done);
+			window.removeEventListener("load", done);
+			try {
+				mo?.disconnect();
+			} catch {}
+			resolve();
+		};
+
+		document.addEventListener("DOMContentLoaded", done, { once: true });
+		window.addEventListener("load", done, { once: true });
+		mo = new MutationObserver(() => done());
+		mo.observe(document.documentElement || document, { childList: true });
+	});
+}
+
+/* -------------------------------------------------- */
 // Main initialization
 (async function main() {
 	log(LOG_LEVEL.INFO, "WebTeX extension initializing...");
+
+	// Ensure DOM is ready and body exists before setting up observers
+	await waitForDocumentReady();
 
 	// Since this script is only injected on allowed domains, we can enable immediately
 	isEnabled = true;
@@ -1667,6 +1702,27 @@ function setupNavigationHandlers() {
 	const debouncedNavigationHandler = debounce(async () => {
 		await handleNavigation();
 	}, 100);
+
+	// Hook history API for SPA route changes
+	const origPushState = history.pushState;
+	const origReplaceState = history.replaceState;
+	history.pushState = function (...args) {
+		const ret = origPushState.apply(this, args);
+		debouncedNavigationHandler();
+		return ret;
+	};
+	history.replaceState = function (...args) {
+		const ret = origReplaceState.apply(this, args);
+		debouncedNavigationHandler();
+		return ret;
+	};
+
+	// Hash changes and BFCache restores
+	window.addEventListener("hashchange", debouncedNavigationHandler);
+	window.addEventListener("pageshow", debouncedNavigationHandler);
+	document.addEventListener("visibilitychange", () => {
+		if (!document.hidden) debouncedNavigationHandler();
+	});
 
 	const navigationObserver = new MutationObserver(() => {
 		if (location.href !== lastUrl) {
