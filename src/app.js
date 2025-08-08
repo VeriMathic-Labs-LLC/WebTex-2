@@ -351,7 +351,7 @@ window.WebTeXLogging = {
 };
 
 // Global error handler for WebTeX
-window.addEventListener("error", (event) => {
+windowErrorHandlerRef = (event) => {
 	// catch all WebTeX errors
 	log(LOG_LEVEL.ERROR, "Unhandled WebTeX error:", event.error);
 	console.error("[WebTeX] Global error caught:", {
@@ -362,15 +362,17 @@ window.addEventListener("error", (event) => {
 		error: event.error,
 		stack: event.error?.stack,
 	});
-});
+};
+window.addEventListener("error", windowErrorHandlerRef);
 
 // Global promise rejection handler
-window.addEventListener("unhandledrejection", (event) => {
+windowRejectionHandlerRef = (event) => {
 	if (event.reason?.toString().includes("WebTeX")) {
 		log(LOG_LEVEL.ERROR, "Unhandled WebTeX promise rejection:", event.reason);
 		console.error("[WebTeX] Unhandled promise rejection:", event.reason);
 	}
-});
+};
+window.addEventListener("unhandledrejection", windowRejectionHandlerRef);
 
 let observer = null;
 let isEnabled = false;
@@ -395,7 +397,7 @@ async function loadKatexLoggingSetting() {
 	} catch (_) {}
 }
 
-chrome.storage.onChanged.addListener((changes, areaName) => {
+storageChangedHandlerRef = (changes, areaName) => {
 	if (areaName === "local" && changes.enableKatexLogging) {
 		ENABLE_KATEX_LOGGING = changes.enableKatexLogging.newValue;
 		try {
@@ -407,7 +409,8 @@ chrome.storage.onChanged.addListener((changes, areaName) => {
 			void safeRender();
 		} catch (_) {}
 	}
-});
+};
+chrome.storage.onChanged.addListener(storageChangedHandlerRef);
 
 function reportKaTeXError(tex, error) {
 	const message = error?.message || (typeof error === "string" ? error : "Unknown KaTeX error");
@@ -1693,7 +1696,7 @@ async function waitForDocumentReady() {
 	await enableRendering();
 
 	// Listen for disable messages from background script
-	chrome.runtime.onMessage.addListener(async (msg, _sender, sendResponse) => {
+	runtimeMessageHandlerRef = async (msg, _sender, sendResponse) => {
 		if (msg.action === "disable-website") {
 			isEnabled = false;
 			disableRendering();
@@ -1704,7 +1707,8 @@ async function waitForDocumentReady() {
 		}
 
 		return true; // Keep message channel open for async response
-	});
+	};
+	chrome.runtime.onMessage.addListener(runtimeMessageHandlerRef);
 
 	setupNavigationHandlers();
 })();
@@ -1712,51 +1716,97 @@ async function waitForDocumentReady() {
 /* -------------------------------------------------- */
 // Navigation and observer setup
 let navigationHandlersSetup = false;
+let navigationObserverInstance = null;
+let debouncedNavigationHandlerRef = null;
+let origPushStateRef = null;
+let origReplaceStateRef = null;
+let onHashChangeRef = null;
+let onPageShowRef = null;
+let onPopStateRef = null;
+let onVisibilityChangeRef = null;
+let lastUrlRef = null;
 
 function setupNavigationHandlers() {
 	if (!isEnabled || navigationHandlersSetup) return;
 
 	navigationHandlersSetup = true;
-	let lastUrl = location.href;
+	lastUrlRef = location.href;
 
-	const debouncedNavigationHandler = debounce(async () => {
+	debouncedNavigationHandlerRef = debounce(async () => {
 		await handleNavigation();
 	}, 100);
 
 	// Hook history API for SPA route changes
-	const origPushState = history.pushState;
-	const origReplaceState = history.replaceState;
+	origPushStateRef = history.pushState;
+	origReplaceStateRef = history.replaceState;
 	history.pushState = function (...args) {
-		const ret = origPushState.apply(this, args);
-		debouncedNavigationHandler();
+		const ret = origPushStateRef.apply(this, args);
+		debouncedNavigationHandlerRef();
 		return ret;
 	};
 	history.replaceState = function (...args) {
-		const ret = origReplaceState.apply(this, args);
-		debouncedNavigationHandler();
+		const ret = origReplaceStateRef.apply(this, args);
+		debouncedNavigationHandlerRef();
 		return ret;
 	};
 
 	// Hash changes and BFCache restores
-	window.addEventListener("hashchange", debouncedNavigationHandler);
-	window.addEventListener("pageshow", debouncedNavigationHandler);
-	document.addEventListener("visibilitychange", () => {
-		if (!document.hidden) debouncedNavigationHandler();
-	});
+	onHashChangeRef = () => debouncedNavigationHandlerRef();
+	onPageShowRef = () => debouncedNavigationHandlerRef();
+	onVisibilityChangeRef = () => {
+		if (!document.hidden) debouncedNavigationHandlerRef();
+	};
+	onPopStateRef = () => debouncedNavigationHandlerRef();
 
-	const navigationObserver = new MutationObserver(() => {
-		if (location.href !== lastUrl) {
-			lastUrl = location.href;
-			debouncedNavigationHandler();
+	window.addEventListener("hashchange", onHashChangeRef);
+	window.addEventListener("pageshow", onPageShowRef);
+	document.addEventListener("visibilitychange", onVisibilityChangeRef);
+	window.addEventListener("popstate", onPopStateRef);
+
+	navigationObserverInstance = new MutationObserver(() => {
+		if (location.href !== lastUrlRef) {
+			lastUrlRef = location.href;
+			debouncedNavigationHandlerRef();
 		}
 	});
 
-	navigationObserver.observe(document.body, {
+	navigationObserverInstance.observe(document.body, {
 		childList: true,
 		subtree: true,
 		characterData: true,
 	});
-	window.addEventListener("popstate", debouncedNavigationHandler);
+}
+
+function teardownNavigationHandlers() {
+	if (!navigationHandlersSetup) return;
+	try {
+		if (onHashChangeRef) window.removeEventListener("hashchange", onHashChangeRef);
+		if (onPageShowRef) window.removeEventListener("pageshow", onPageShowRef);
+		if (onVisibilityChangeRef)
+			document.removeEventListener("visibilitychange", onVisibilityChangeRef);
+		if (onPopStateRef) window.removeEventListener("popstate", onPopStateRef);
+	} catch {}
+	try {
+		navigationObserverInstance?.disconnect();
+	} catch {}
+	try {
+		if (origPushStateRef) history.pushState = origPushStateRef;
+		if (origReplaceStateRef) history.replaceState = origReplaceStateRef;
+	} catch {}
+	try {
+		debouncedNavigationHandlerRef?.cancel?.();
+	} catch {}
+
+	navigationObserverInstance = null;
+	debouncedNavigationHandlerRef = null;
+	origPushStateRef = null;
+	origReplaceStateRef = null;
+	onHashChangeRef = null;
+	onPageShowRef = null;
+	onVisibilityChangeRef = null;
+	onPopStateRef = null;
+	lastUrlRef = null;
+	navigationHandlersSetup = false;
 }
 
 async function handleNavigation() {
@@ -1810,6 +1860,20 @@ function disableRendering() {
 		observer.disconnect();
 		observer = null;
 	}
+
+	// Tear down navigation handlers and restore history hooks
+	teardownNavigationHandlers();
+
+	// Remove global and Chrome listeners
+	try {
+		if (windowErrorHandlerRef) window.removeEventListener("error", windowErrorHandlerRef);
+		if (windowRejectionHandlerRef)
+			window.removeEventListener("unhandledrejection", windowRejectionHandlerRef);
+		if (storageChangedHandlerRef)
+			chrome.storage.onChanged.removeListener(storageChangedHandlerRef);
+		if (runtimeMessageHandlerRef)
+			chrome.runtime.onMessage.removeListener(runtimeMessageHandlerRef);
+	} catch {}
 
 	// Restore original DOM structure completely
 	document
@@ -1894,8 +1958,12 @@ function mutationsOnlyRipple(muts) {
 
 function debounce(fn, ms) {
 	let t;
-	return (...a) => {
+	const debounced = (...a) => {
 		clearTimeout(t);
 		t = setTimeout(() => fn(...a), ms);
 	};
+	debounced.cancel = () => {
+		clearTimeout(t);
+	};
+	return debounced;
 }
