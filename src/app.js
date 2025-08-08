@@ -20,7 +20,6 @@ async function injectCSS() {
 	display: inline;
 	color: inherit !important;
 }
-
 .webtex-math {
 	display: inline-block;
 	color: inherit !important;
@@ -387,6 +386,21 @@ window.rendererState = rendererState;
 
 // Collect KaTeX parse errors for debugging
 window.webtexErrors = [];
+let ENABLE_KATEX_LOGGING = false;
+
+async function loadKatexLoggingSetting() {
+	try {
+		const { enableKatexLogging = false } = await chrome.storage.local.get("enableKatexLogging");
+		ENABLE_KATEX_LOGGING = enableKatexLogging ?? false;
+	} catch (_) {}
+}
+
+chrome.storage.onChanged.addListener((changes) => {
+	if (changes.enableKatexLogging) {
+		ENABLE_KATEX_LOGGING = changes.enableKatexLogging.newValue;
+	}
+});
+
 function reportKaTeXError(tex, error) {
 	const message = error?.message || (typeof error === "string" ? error : "Unknown KaTeX error");
 
@@ -396,7 +410,9 @@ function reportKaTeXError(tex, error) {
 	}
 
 	window.webtexErrors.push({ tex, message, time: Date.now() });
-	log(LOG_LEVEL.WARN, "[WebTeX] KaTeX parse error:", message, "in", tex);
+	if (ENABLE_KATEX_LOGGING) {
+		log(LOG_LEVEL.WARN, "[WebTeX] KaTeX parse error:", message, "in", tex);
+	}
 
 	// Dispatch a custom event for external listeners/devtools panels
 	try {
@@ -1157,20 +1173,12 @@ async function renderMathExpression(tex, displayMode = false, element = null) {
 			displayMode: isDisplayMath,
 			errorColor: "inherit",
 			strict: (errorCode) => {
-				// This is a known, safe-to-ignore warning for matrices and aligned environments.
-				if (errorCode === "newLineInDisplayMode") {
-					return "ignore";
-				}
-				// Handle text mode accent commands in math mode (common in user input)
-				if (errorCode === "mathVsTextAccents") {
-					return "ignore";
-				}
-				// Handle Unicode character warnings (we've already processed them)
-				if (errorCode === "unknownSymbol") {
-					return "ignore";
-				}
-				// For all other issues, continue to show a warning in the console.
-				return "warn";
+				// Always ignore these known noisy warnings
+				if (errorCode === "newLineInDisplayMode") return "ignore";
+				if (errorCode === "mathVsTextAccents") return "ignore";
+				if (errorCode === "unknownSymbol") return "ignore";
+				// Gate remaining warnings based on user preference
+				return ENABLE_KATEX_LOGGING ? "warn" : "ignore";
 			},
 			trust: false,
 			throwOnError: true, // We will catch the error
@@ -1178,6 +1186,9 @@ async function renderMathExpression(tex, displayMode = false, element = null) {
 
 		const originalWarn = console.warn;
 		console.warn = (msg, ...rest) => {
+			// If verbose logging is disabled, suppress KaTeX warnings entirely during render
+			if (!ENABLE_KATEX_LOGGING) return;
+			// Filter specific noisy warning even when enabled
 			if (typeof msg === "string" && msg.includes("No character metrics for")) return;
 			originalWarn.call(console, msg, ...rest);
 		};
@@ -1670,6 +1681,9 @@ async function waitForDocumentReady() {
 
 	// Ensure DOM is ready and body exists before setting up observers
 	await waitForDocumentReady();
+
+	// Load persisted user settings before first render
+	await loadKatexLoggingSetting();
 
 	// Since this script is only injected on allowed domains, we can enable immediately
 	isEnabled = true;

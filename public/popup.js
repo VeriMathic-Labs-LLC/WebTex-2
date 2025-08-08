@@ -151,6 +151,8 @@ const $ = (id) => document.getElementById(id);
 const siteToggle = $("siteToggle");
 const siteStatus = $("siteStatus");
 const domainSpan = $("domainName");
+const advancedSection = $("advancedSection");
+const katexLoggingToggle = $("katexLoggingToggle");
 
 let host;
 let normalizedHost;
@@ -190,6 +192,22 @@ chrome.tabs.query({ active: true, currentWindow: true }).then(async ([tab]) => {
 
 	const { allowedDomains = [] } = await chrome.storage.local.get("allowedDomains");
 	refreshSite(allowedDomains);
+
+	// Load Advanced section state and KaTeX logging preference
+	try {
+		const { advancedOpen = false, enableKatexLogging = false } = await chrome.storage.local.get([
+			"advancedOpen",
+			"enableKatexLogging",
+		]);
+		if (advancedSection) {
+			advancedSection.open = !!advancedOpen;
+			// Persist initial open state if key doesn't exist to make future toggles consistent
+			await chrome.storage.local.set({ advancedOpen: !!advancedOpen });
+		}
+		if (katexLoggingToggle) {
+			katexLoggingToggle.checked = !!enableKatexLogging;
+		}
+	} catch (_e) {}
 });
 
 /* ---------- event handlers ---------- */
@@ -234,4 +252,26 @@ function refreshSite(list) {
 	siteToggle.checked = active;
 	siteStatus.textContent = active ? "ON" : "OFF";
 	siteStatus.className = `chip ${active ? "on" : "off"}`;
+}
+
+/* ---------- Advanced handlers ---------- */
+if (advancedSection) {
+	// Persist open/closed state
+	advancedSection.addEventListener("toggle", async () => {
+		try {
+			await chrome.storage.local.set({ advancedOpen: advancedSection.open });
+		} catch (_e) {}
+	});
+}
+
+if (katexLoggingToggle) {
+	katexLoggingToggle.onchange = async () => {
+		try {
+			await chrome.storage.local.set({ enableKatexLogging: !!katexLoggingToggle.checked });
+			showToggleStatus(
+				`KaTeX error logging ${katexLoggingToggle.checked ? "enabled" : "disabled"}`,
+				true,
+			);
+		} catch (_e) {}
+	};
 }
