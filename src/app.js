@@ -295,12 +295,15 @@ const LOG_LEVEL = {
 };
 
 let CURRENT_LOG_LEVEL = LOG_LEVEL.WARN; // Show WARN and ERROR by default
+// Track if we create any globals so we can clean them up on disable
+let webtexCreatedLogLevel = false;
 // Sync with global window setting if present, and initialize it otherwise.
 if (typeof window !== "undefined") {
 	if (typeof window.WEBTEX_LOG_LEVEL === "number") {
 		CURRENT_LOG_LEVEL = window.WEBTEX_LOG_LEVEL;
 	} else {
 		window.WEBTEX_LOG_LEVEL = CURRENT_LOG_LEVEL;
+		webtexCreatedLogLevel = true;
 	}
 }
 
@@ -342,22 +345,26 @@ function log(level, ...args) {
 	}
 }
 
-// Expose logging controls globally for debugging
-window.WebTeXLogging = {
-	setLevel: (level) => {
-		CURRENT_LOG_LEVEL = level;
-		window.WEBTEX_LOG_LEVEL = level;
-		console.log(
-			`[WebTeX] Log level set to ${Object.keys(LOG_LEVEL)[Object.values(LOG_LEVEL).indexOf(level)]}`,
-		);
-	},
-	showErrors: () => window.WebTeXLogging.setLevel(LOG_LEVEL.ERROR),
-	showWarnings: () => window.WebTeXLogging.setLevel(LOG_LEVEL.WARN),
-	showInfo: () => window.WebTeXLogging.setLevel(LOG_LEVEL.INFO),
-	showDebug: () => window.WebTeXLogging.setLevel(LOG_LEVEL.DEBUG),
-	showAll: () => window.WebTeXLogging.setLevel(LOG_LEVEL.DEBUG),
-	hide: () => window.WebTeXLogging.setLevel(0),
-};
+// Expose logging controls globally for debugging (avoid clobbering page globals)
+let webtexCreatedLogApi = false;
+if (typeof window.WebTeXLogging !== "object") {
+	window.WebTeXLogging = {
+		setLevel: (level) => {
+			CURRENT_LOG_LEVEL = level;
+			window.WEBTEX_LOG_LEVEL = level;
+			console.log(
+				`[WebTeX] Log level set to ${Object.keys(LOG_LEVEL)[Object.values(LOG_LEVEL).indexOf(level)]}`,
+			);
+		},
+		showErrors: () => window.WebTeXLogging.setLevel(LOG_LEVEL.ERROR),
+		showWarnings: () => window.WebTeXLogging.setLevel(LOG_LEVEL.WARN),
+		showInfo: () => window.WebTeXLogging.setLevel(LOG_LEVEL.INFO),
+		showDebug: () => window.WebTeXLogging.setLevel(LOG_LEVEL.DEBUG),
+		showAll: () => window.WebTeXLogging.setLevel(LOG_LEVEL.DEBUG),
+		hide: () => window.WebTeXLogging.setLevel(0),
+	};
+	webtexCreatedLogApi = true;
+}
 
 // Global handler references (declared as const to avoid reassignment)
 const windowErrorHandlerRef = (event) => {
@@ -1069,7 +1076,7 @@ class CustomLatexParser {
 						// If clearly mathy, unwrap so KaTeX parses it
 						if (
 							/[\\^_]|→/.test(inner) ||
-							/\\(to|nu|gamma|overline|bar|frac|int|sum|mathrm|mathbf|text)\b/.test(inner)
+							/\\(to|nu|gamma|overline|bar|frac|int|sum|prod|mathrm|mathbf|text)\b/.test(inner)
 						) {
 							out += inner;
 							continue;
@@ -2077,6 +2084,22 @@ function disableRendering() {
 	// Clear global state to prevent memory leaks
 	delete window.rendererState;
 	delete window.webtexErrors;
+
+	// Clean up global debug/logging exports to avoid page side-effects when disabled
+	try {
+		if (webtexCreatedLogApi && "WebTeXLogging" in window) {
+			delete window.WebTeXLogging;
+		}
+	} catch {}
+	try {
+		if (webtexCreatedLogLevel && "WEBTEX_LOG_LEVEL" in window) {
+			delete window.WEBTEX_LOG_LEVEL;
+		}
+	} catch {}
+
+	// Reset internal refs to avoid accidental reuse if body is swapped later
+	observedBodyRef = null;
+	navObservedBodyRef = null;
 }
 
 /* -------------------------------------------------- */
