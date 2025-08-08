@@ -401,11 +401,7 @@ async function loadKatexLoggingSetting() {
 		const { enableKatexLogging = false } = await chrome.storage.local.get("enableKatexLogging");
 		ENABLE_KATEX_LOGGING = enableKatexLogging ?? false;
 	} catch (e) {
-		if (ENABLE_KATEX_LOGGING) {
-			try {
-				console.error("[WebTeX] Failed to load 'enableKatexLogging' from storage:", e);
-			} catch {}
-		}
+		console.error("[WebTeX] Failed to load 'enableKatexLogging' from storage:", e);
 	}
 }
 
@@ -1700,11 +1696,7 @@ async function waitForDocumentReady() {
 			try {
 				mo?.disconnect();
 			} catch (e) {
-				if (ENABLE_KATEX_LOGGING) {
-					try {
-						console.error("[WebTeX] Failed to disconnect readiness observer:", e);
-					} catch {}
-				}
+				console.error("[WebTeX] Failed to disconnect readiness observer:", e);
 			}
 			resolve();
 		};
@@ -1848,7 +1840,7 @@ function teardownNavigationHandlers() {
 		}
 	}
 	try {
-		if (debouncedNavigationHandlerRef?.cancel) debouncedNavigationHandlerRef.cancel();
+		if (debouncedNavigationHandlerRef) debouncedNavigationHandlerRef.cancel();
 	} catch (e) {
 		if (ENABLE_KATEX_LOGGING) {
 			try {
@@ -2030,6 +2022,7 @@ function debounce(fn, ms) {
 	};
 	debounced.cancel = () => {
 		clearTimeout(t);
+		t = null;
 	};
 	return debounced;
 }
