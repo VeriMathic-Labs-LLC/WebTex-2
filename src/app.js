@@ -1869,10 +1869,8 @@ function disableRendering() {
 		if (windowErrorHandlerRef) window.removeEventListener("error", windowErrorHandlerRef);
 		if (windowRejectionHandlerRef)
 			window.removeEventListener("unhandledrejection", windowRejectionHandlerRef);
-		if (storageChangedHandlerRef)
-			chrome.storage.onChanged.removeListener(storageChangedHandlerRef);
-		if (runtimeMessageHandlerRef)
-			chrome.runtime.onMessage.removeListener(runtimeMessageHandlerRef);
+		if (storageChangedHandlerRef) chrome.storage.onChanged.removeListener(storageChangedHandlerRef);
+		if (runtimeMessageHandlerRef) chrome.runtime.onMessage.removeListener(runtimeMessageHandlerRef);
 	} catch {}
 
 	// Restore original DOM structure completely
