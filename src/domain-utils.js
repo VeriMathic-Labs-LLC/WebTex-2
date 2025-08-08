@@ -36,6 +36,12 @@ const COMMON_SUBDOMAINS = [
 export function normalizeDomain(hostname) {
 	if (!hostname) return "";
 
+	// Normalize host: lowercase, strip port and IPv6 brackets
+	const host = hostname
+		.toLowerCase()
+		.replace(/:\d+$/, "")
+		.replace(/^\[|\]$/g, "");
+
 	// Handle localhost, IPv4, and IPv6 (with optional port)
 	const ipv4 = /^\d{1,3}(?:\.\d{1,3}){3}$/;
 	const ipv6 = /^[0-9a-f:]+$/;
@@ -44,7 +50,7 @@ export function normalizeDomain(hostname) {
 	}
 
 	// Split into parts
-	const parts = hostname.toLowerCase().split(".");
+	const parts = host.split(".");
 
 	// If we have 2 or fewer parts, return as-is
 	if (parts.length <= 2) {
