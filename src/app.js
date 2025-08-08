@@ -4,7 +4,7 @@
 import katex from "katex";
 
 // CSS injection management
-let injectedStylesheets = [];
+const injectedStylesheets = [];
 
 async function injectCSS() {
 	if (injectedStylesheets.length > 0) return; // Already injected
@@ -274,7 +274,7 @@ function removeCSS() {
 			style.parentNode.removeChild(style);
 		}
 	});
-	injectedStylesheets = [];
+	injectedStylesheets.length = 0;
 }
 
 /* -------------------------------------------------- */
@@ -305,13 +305,22 @@ if (typeof window !== "undefined") {
 }
 
 function log(level, ...args) {
-	const effectiveLevel =
+	// When KaTeX/error logging toggle is ON, ensure at least WARN-level messages are shown
+	// regardless of the global WebTeX logging level. This guarantees all warnings/errors surface.
+	const baseLevel =
 		typeof window !== "undefined" && typeof window.WEBTEX_LOG_LEVEL === "number"
 			? window.WEBTEX_LOG_LEVEL
 			: CURRENT_LOG_LEVEL;
+	const effectiveLevel = ENABLE_KATEX_LOGGING ? Math.max(baseLevel, LOG_LEVEL.WARN) : baseLevel;
 	if (level <= effectiveLevel) {
 		const now = new Date();
-		const timestamp = `${now.getHours().toString().padStart(2, "0")}:${now.getMinutes().toString().padStart(2, "0")}:${now.getSeconds().toString().padStart(2, "0")}.${now.getMilliseconds().toString().padStart(3, "0")}`;
+		const timestamp = `${now.getHours().toString().padStart(2, "0")}:${now
+			.getMinutes()
+			.toString()
+			.padStart(2, "0")}:${now.getSeconds().toString().padStart(2, "0")}.${now
+			.getMilliseconds()
+			.toString()
+			.padStart(3, "0")}`;
 		const prefix = `[WebTeX ${timestamp}]`;
 
 		switch (level) {
@@ -350,14 +359,8 @@ window.WebTeXLogging = {
 	hide: () => window.WebTeXLogging.setLevel(0),
 };
 
-// Handler references (declared before assignment to prevent ReferenceError if used in cleanup before assignment)
-let windowErrorHandlerRef;
-let windowRejectionHandlerRef;
-let storageChangedHandlerRef;
-let runtimeMessageHandlerRef;
-
-// Global error handler for WebTeX
-windowErrorHandlerRef = (event) => {
+// Global handler references (declared as const to avoid reassignment)
+const windowErrorHandlerRef = (event) => {
 	// catch all WebTeX errors
 	log(LOG_LEVEL.ERROR, "Unhandled WebTeX error:", event.error);
 	console.error("[WebTeX] Global error caught:", {
@@ -369,16 +372,32 @@ windowErrorHandlerRef = (event) => {
 		stack: event.error?.stack,
 	});
 };
-window.addEventListener("error", windowErrorHandlerRef);
-
-// Global promise rejection handler
-windowRejectionHandlerRef = (event) => {
+const windowRejectionHandlerRef = (event) => {
 	if (event.reason?.toString().includes("WebTeX")) {
 		log(LOG_LEVEL.ERROR, "Unhandled WebTeX promise rejection:", event.reason);
 		console.error("[WebTeX] Unhandled promise rejection:", event.reason);
 	}
 };
+
+// Global error handler for WebTeX
+window.addEventListener("error", windowErrorHandlerRef);
+
+// Global promise rejection handler
 window.addEventListener("unhandledrejection", windowRejectionHandlerRef);
+
+// Runtime message handler (declared as const to avoid reassignment)
+const runtimeMessageHandlerRef = async (msg, _sender, sendResponse) => {
+	if (msg.action === "disable-website") {
+		isEnabled = false;
+		disableRendering();
+		sendResponse({ success: true, enabled: false });
+	} else if (msg.action === "ping") {
+		// Let background know the content script is alive
+		sendResponse({ ok: true, isEnabled });
+	}
+
+	return true; // Keep message channel open for async response
+};
 
 let observer = null;
 let isEnabled = false;
@@ -407,7 +426,7 @@ async function loadKatexLoggingSetting() {
 	}
 }
 
-storageChangedHandlerRef = (changes, areaName) => {
+const storageChangedHandlerRef = (changes, areaName) => {
 	if (areaName === "local" && changes.enableKatexLogging) {
 		ENABLE_KATEX_LOGGING = changes.enableKatexLogging.newValue;
 		try {
@@ -1174,7 +1193,6 @@ class CustomLatexParser {
 const customParser = new CustomLatexParser();
 
 /* -------------------------------------------------- */
-// In src/app.js, replace the whole function
 
 async function renderMathExpression(tex, displayMode = false, element = null) {
 	rendererState.totalAttempts++;
@@ -1739,19 +1757,7 @@ async function waitForDocumentReady() {
 	isEnabled = true;
 	await enableRendering();
 
-	// Listen for disable messages from background script
-	runtimeMessageHandlerRef = async (msg, _sender, sendResponse) => {
-		if (msg.action === "disable-website") {
-			isEnabled = false;
-			disableRendering();
-			sendResponse({ success: true, enabled: false });
-		} else if (msg.action === "ping") {
-			// Let background know the content script is alive
-			sendResponse({ ok: true, isEnabled });
-		}
-
-		return true; // Keep message channel open for async response
-	};
+	// Listen for disable messages from background script (handler defined above)
 	chrome.runtime.onMessage.addListener(runtimeMessageHandlerRef);
 
 	setupNavigationHandlers();
@@ -1945,10 +1951,8 @@ function disableRendering() {
 		if (windowErrorHandlerRef) window.removeEventListener("error", windowErrorHandlerRef);
 		if (windowRejectionHandlerRef)
 			window.removeEventListener("unhandledrejection", windowRejectionHandlerRef);
-		if (storageChangedHandlerRef)
-			chrome.storage.onChanged.removeListener(storageChangedHandlerRef);
-		if (runtimeMessageHandlerRef)
-			chrome.runtime.onMessage.removeListener(runtimeMessageHandlerRef);
+		if (storageChangedHandlerRef) chrome.storage.onChanged.removeListener(storageChangedHandlerRef);
+		if (runtimeMessageHandlerRef) chrome.runtime.onMessage.removeListener(runtimeMessageHandlerRef);
 	} catch (e) {
 		if (ENABLE_KATEX_LOGGING) {
 			try {
