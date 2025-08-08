@@ -136,6 +136,7 @@ async function injectCSS() {
 .webtex-katex-rendered,
 .webtex-custom-rendered {
 	color: inherit !important;
+}
 
 /* Prevent font synthesis to reduce jarring changes during font load */
 .katex, .katex * { font-synthesis: none; }
