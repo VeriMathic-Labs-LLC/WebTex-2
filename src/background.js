@@ -16,10 +16,16 @@ chrome.runtime.onInstalled.addListener((details) => {
 
 // Handle tab updates to inject content scripts on allowed domains
 chrome.tabs.onUpdated.addListener(async (tabId, changeInfo, tab) => {
-	// Only proceed if the page is complete and has a URL
-	if (changeInfo.status !== "complete" || !tab.url) return;
-
 	try {
+		// Reset our injected state when a page starts loading to avoid stale tab tracking
+		if (changeInfo.status === "loading") {
+			injectedTabs.delete(tabId);
+			return;
+		}
+
+		// Only proceed if the page is complete and has a URL
+		if (changeInfo.status !== "complete" || !tab.url) return;
+
 		const url = new URL(tab.url);
 		const { allowedDomains = [] } = await chrome.storage.local.get("allowedDomains");
 
@@ -30,14 +36,23 @@ chrome.tabs.onUpdated.addListener(async (tabId, changeInfo, tab) => {
 			url.pathname.includes("test-comprehensive.html") ||
 			url.pathname.includes("test-simple.html");
 
-		// Inject or remove content script based on domain status
-		if (shouldInject && !injectedTabs.has(tabId)) {
-			await chrome.scripting.executeScript({
-				target: { tabId: tabId },
-				files: ["app.js"],
-			});
-			injectedTabs.add(tabId);
-			console.log(`WebTeX: Injected content script on ${url.hostname}`);
+		if (shouldInject) {
+			let alive = false;
+			try {
+				// Ping the content script if we think we've injected before
+				if (injectedTabs.has(tabId)) {
+					const res = await chrome.tabs.sendMessage(tabId, { action: "ping" });
+					alive = !!res?.ok;
+				}
+			} catch (_e) {
+				alive = false;
+			}
+
+			if (!alive) {
+				await chrome.scripting.executeScript({ target: { tabId }, files: ["app.js"] });
+				injectedTabs.add(tabId);
+				console.log(`WebTeX: Injected content script on ${url.hostname}`);
+			}
 		} else if (!shouldInject && injectedTabs.has(tabId)) {
 			// Note: We can't easily remove content scripts, but we can send a message to disable
 			try {

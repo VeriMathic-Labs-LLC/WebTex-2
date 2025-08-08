@@ -395,9 +395,17 @@ async function loadKatexLoggingSetting() {
 	} catch (_) {}
 }
 
-chrome.storage.onChanged.addListener((changes) => {
-	if (changes.enableKatexLogging) {
+chrome.storage.onChanged.addListener((changes, areaName) => {
+	if (areaName === "local" && changes.enableKatexLogging) {
 		ENABLE_KATEX_LOGGING = changes.enableKatexLogging.newValue;
+		try {
+			console.info(`[WebTeX] KaTeX logging ${ENABLE_KATEX_LOGGING ? "enabled" : "disabled"}`);
+		} catch (_) {}
+		// Proactively re-render to ensure state is consistent without requiring a page reload
+		try {
+			// Fire and forget; safeRender has its own error guards
+			void safeRender();
+		} catch (_) {}
 	}
 });
 
@@ -429,9 +437,8 @@ function cleanupEmptyBraces(str) {
 	// Preserve empty base before superscripts/subscripts (e.g., {}^{A}, {}_{Z}).
 	// Only remove empty groups when they are NOT immediately (optionally after whitespace)
 	// followed by ^ or _.
-	str = str.replace(/\{\}\{\}\{\}\{\}(?!\s*[\^_])/g, "");
-	str = str.replace(/\{\}\{\}\{\}(?!\s*[\^_])/g, "");
-	str = str.replace(/\{\}\{\}(?!\s*[\^_])/g, "");
+	// Remove any run of 2 or more empty groups not followed by ^ or _
+	str = str.replace(/(?:\{\}){2,}(?!\s*[\^_])/g, "");
 	// Remove single empty braces not followed by ^ or _ ONLY if they are not part of a required command argument (e.g., \\text{})
 	// We achieve this by ensuring the braces are NOT immediately preceded by a backslash followed by letters (a LaTeX command)
 	// Example kept: "\\text{}" => should stay. Example removed: stray "{}" not used as a base.
@@ -1184,9 +1191,9 @@ async function renderMathExpression(tex, displayMode = false, element = null) {
 		console.warn = (msg, ...rest) => {
 			// If verbose logging is disabled, suppress KaTeX warnings entirely during render
 			if (!ENABLE_KATEX_LOGGING) return;
-			// Filter specific noisy warning even when enabled
-			if (typeof msg === "string" && msg.includes("No character metrics for")) return;
-			originalWarn.call(console, msg, ...rest);
+			try {
+				originalWarn.call(console, msg, ...rest);
+			} catch (_) {}
 		};
 		let rendered;
 		try {
@@ -1691,6 +1698,9 @@ async function waitForDocumentReady() {
 			isEnabled = false;
 			disableRendering();
 			sendResponse({ success: true, enabled: false });
+		} else if (msg.action === "ping") {
+			// Let background know the content script is alive
+			sendResponse({ ok: true, isEnabled });
 		}
 
 		return true; // Keep message channel open for async response
