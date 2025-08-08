@@ -6,22 +6,17 @@
 	"scripts": {
 		"watch": "node ./node_modules/webpack/bin/webpack.js --mode=development --watch --config config/webpack.config.js",
 		"build": "node ./node_modules/webpack/bin/webpack.js --mode=production --config config/webpack.config.js",
-		"check": "npx @biomejs/biome check --write --max-diagnostics=1000",
-		"dev": "node dev-server.js",
-		"start": "npm run build && npm run dev"
+		"check": "npx @biomejs/biome check --write --max-diagnostics=1000"
 	},
 	"devDependencies": {
 		"@biomejs/biome": "2.1.4",
 		"copy-webpack-plugin": "^13.0.0",
 		"css-loader": "^7.1.2",
-		"express": "^5.1.0",
 		"mini-css-extract-plugin": "^2.9.3",
-		"open": "^10.2.0",
 		"terser-webpack-plugin": "^5.3.10",
 		"size-plugin": "^1.2.0",
 		"webpack": "^5.101.0",
 		"webpack-cli": "^6.0.1",
-		"webpack-dev-middleware": "^7.4.2",
 		"webpack-merge": "^6.0.1"
 	},
 	"dependencies": {

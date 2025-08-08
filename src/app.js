@@ -401,6 +401,7 @@ const runtimeMessageHandlerRef = async (msg, _sender, sendResponse) => {
 
 let observer = null;
 let isEnabled = false;
+let observedBodyRef = null;
 const _katexLoaded = true; // KaTeX is bundled
 const rendererState = {
 	katexSuccess: 0,
@@ -1774,6 +1775,10 @@ let onHashChangeRef = null;
 let onPageShowRef = null;
 let onPopStateRef = null;
 let onVisibilityChangeRef = null;
+let onPjaxEndRef = null;
+let onTurboLoadRef = null;
+let onTurboRenderRef = null;
+let navObservedBodyRef = null;
 let lastUrlRef = null;
 
 function setupNavigationHandlers() {
@@ -1808,10 +1813,20 @@ function setupNavigationHandlers() {
 	};
 	onPopStateRef = () => debouncedNavigationHandlerRef();
 
+	// PJAX/Turbo events used by GitHub and similar sites
+	onPjaxEndRef = () => debouncedNavigationHandlerRef();
+	onTurboLoadRef = () => debouncedNavigationHandlerRef();
+	onTurboRenderRef = () => debouncedNavigationHandlerRef();
+
 	window.addEventListener("hashchange", onHashChangeRef);
 	window.addEventListener("pageshow", onPageShowRef);
 	document.addEventListener("visibilitychange", onVisibilityChangeRef);
 	window.addEventListener("popstate", onPopStateRef);
+	// Listen to common SPA navigation events
+	document.addEventListener("pjax:end", onPjaxEndRef);
+	document.addEventListener("pjax:complete", onPjaxEndRef);
+	document.addEventListener("turbo:load", onTurboLoadRef);
+	document.addEventListener("turbo:render", onTurboRenderRef);
 
 	navigationObserverInstance = new MutationObserver(() => {
 		if (location.href !== lastUrlRef) {
@@ -1825,6 +1840,9 @@ function setupNavigationHandlers() {
 		subtree: true,
 		characterData: true,
 	});
+
+	// Track which body is being observed to handle body replacement
+	navObservedBodyRef = document.body;
 }
 
 function teardownNavigationHandlers() {
@@ -1835,6 +1853,12 @@ function teardownNavigationHandlers() {
 		if (onVisibilityChangeRef)
 			document.removeEventListener("visibilitychange", onVisibilityChangeRef);
 		if (onPopStateRef) window.removeEventListener("popstate", onPopStateRef);
+		if (onPjaxEndRef) {
+			document.removeEventListener("pjax:end", onPjaxEndRef);
+			document.removeEventListener("pjax:complete", onPjaxEndRef);
+		}
+		if (onTurboLoadRef) document.removeEventListener("turbo:load", onTurboLoadRef);
+		if (onTurboRenderRef) document.removeEventListener("turbo:render", onTurboRenderRef);
 	} catch (e) {
 		if (ENABLE_KATEX_LOGGING) {
 			try {
@@ -1887,12 +1911,51 @@ function teardownNavigationHandlers() {
 	onPageShowRef = null;
 	onVisibilityChangeRef = null;
 	onPopStateRef = null;
+	onPjaxEndRef = null;
+	onTurboLoadRef = null;
+	onTurboRenderRef = null;
 	lastUrlRef = null;
 	navigationHandlersSetup = false;
 }
 
 async function handleNavigation() {
 	if (!isEnabled) return;
+
+	// If the page framework swapped out <body>, reattach our observers
+	try {
+		if (observer && observedBodyRef !== document.body) {
+			observer.disconnect();
+			observer.observe(document.body, { childList: true, subtree: true, characterData: true });
+			observedBodyRef = document.body;
+		}
+	} catch (e) {
+		if (ENABLE_KATEX_LOGGING) {
+			try {
+				console.error("[WebTeX] Failed to reattach main MutationObserver after body swap:", e);
+			} catch {}
+		}
+	}
+
+	try {
+		if (navigationObserverInstance && navObservedBodyRef !== document.body) {
+			navigationObserverInstance.disconnect();
+			navigationObserverInstance.observe(document.body, {
+				childList: true,
+				subtree: true,
+				characterData: true,
+			});
+			navObservedBodyRef = document.body;
+		}
+	} catch (e) {
+		if (ENABLE_KATEX_LOGGING) {
+			try {
+				console.error(
+					"[WebTeX] Failed to reattach navigation MutationObserver after body swap:",
+					e,
+				);
+			} catch {}
+		}
+	}
 	await safeRender();
 }
 
@@ -1902,7 +1965,12 @@ async function enableRendering() {
 
 	observer = new MutationObserver(
 		debounce(async (muts) => {
-			if (mutationsOnlyRipple(muts) || userIsSelectingText() || typingInsideActiveElement(muts)) {
+			// Guard optional helpers; don't break if they are undefined
+			const shouldSkip =
+				(typeof mutationsOnlyRipple === "function" && mutationsOnlyRipple(muts)) ||
+				(typeof userIsSelectingText === "function" && userIsSelectingText()) ||
+				(typeof typingInsideActiveElement === "function" && typingInsideActiveElement(muts));
+			if (shouldSkip) {
 				return;
 			}
 
@@ -1935,6 +2003,7 @@ async function enableRendering() {
 	);
 
 	observer.observe(document.body, { childList: true, subtree: true, characterData: true });
+	observedBodyRef = document.body;
 }
 
 function disableRendering() {
