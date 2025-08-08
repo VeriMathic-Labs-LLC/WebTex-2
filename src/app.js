@@ -2022,7 +2022,6 @@ function debounce(fn, ms) {
 	};
 	debounced.cancel = () => {
 		clearTimeout(t);
-		t = null;
 	};
 	return debounced;
 }
