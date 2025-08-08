@@ -439,11 +439,23 @@ function reportKaTeXError(tex, error) {
 		// Surface parse errors prominently when verbose logging is enabled
 		try {
 			console.error("[WebTeX] KaTeX parse error:", message, "in", tex, error);
-		} catch (e) {}
+		} catch (e) {
+			if (ENABLE_KATEX_LOGGING) {
+				try {
+					console.error("[WebTeX] Failed to write KaTeX parse error to console:", e);
+				} catch {}
+			}
+		}
 		// Also use the internal logger for consistency
 		try {
 			log(LOG_LEVEL.ERROR, "[WebTeX] KaTeX parse error:", message, "in", tex);
-		} catch (e) {}
+		} catch (e) {
+			if (ENABLE_KATEX_LOGGING) {
+				try {
+					console.error("[WebTeX] Failed to log KaTeX parse error:", e);
+				} catch {}
+			}
+		}
 	}
 
 	// Dispatch a custom event for external listeners/devtools panels
@@ -1222,7 +1234,9 @@ async function renderMathExpression(tex, displayMode = false, element = null) {
 			if (!ENABLE_KATEX_LOGGING) return;
 			try {
 				originalWarn.call(console, msg, ...rest);
-			} catch (e) {}
+			} catch (e) {
+				console.error(e);
+			}
 		};
 		let rendered;
 		try {
