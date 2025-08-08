@@ -1862,7 +1862,7 @@ function teardownNavigationHandlers() {
 		}
 	}
 	try {
-		if (debouncedNavigationHandlerRef) debouncedNavigationHandlerRef.cancel();
+		if (debouncedNavigationHandlerRef?.cancel) debouncedNavigationHandlerRef.cancel();
 	} catch (e) {
 		if (ENABLE_KATEX_LOGGING) {
 			try {
