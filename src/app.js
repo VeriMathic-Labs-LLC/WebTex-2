@@ -394,7 +394,13 @@ async function loadKatexLoggingSetting() {
 	try {
 		const { enableKatexLogging = false } = await chrome.storage.local.get("enableKatexLogging");
 		ENABLE_KATEX_LOGGING = enableKatexLogging ?? false;
-	} catch (_) {}
+	} catch (e) {
+		if (ENABLE_KATEX_LOGGING) {
+			try {
+				console.error("[WebTeX] Failed to load 'enableKatexLogging' from storage:", e);
+			} catch {}
+		}
+	}
 }
 
 storageChangedHandlerRef = (changes, areaName) => {
@@ -402,12 +408,24 @@ storageChangedHandlerRef = (changes, areaName) => {
 		ENABLE_KATEX_LOGGING = changes.enableKatexLogging.newValue;
 		try {
 			console.info(`[WebTeX] KaTeX logging ${ENABLE_KATEX_LOGGING ? "enabled" : "disabled"}`);
-		} catch (_) {}
+		} catch (e) {
+			if (ENABLE_KATEX_LOGGING) {
+				try {
+					console.error("[WebTeX] Failed to write logging state to console:", e);
+				} catch {}
+			}
+		}
 		// Proactively re-render to ensure state is consistent without requiring a page reload
 		try {
 			// Fire and forget; safeRender has its own error guards
 			void safeRender();
-		} catch (_) {}
+		} catch (e) {
+			if (ENABLE_KATEX_LOGGING) {
+				try {
+					log(LOG_LEVEL.ERROR, "[WebTeX] Re-render after logging toggle failed:", e);
+				} catch {}
+			}
+		}
 	}
 };
 chrome.storage.onChanged.addListener(storageChangedHandlerRef);
@@ -430,7 +448,13 @@ function reportKaTeXError(tex, error) {
 	try {
 		const evt = new CustomEvent("webtex-katex-error", { detail: { tex, message } });
 		document.dispatchEvent(evt);
-	} catch (_) {}
+	} catch (e) {
+		if (ENABLE_KATEX_LOGGING) {
+			try {
+				console.error("[WebTeX] Failed to dispatch 'webtex-katex-error' event:", e);
+			} catch {}
+		}
+	}
 }
 
 /* -------------------------------------------------- */
@@ -1669,7 +1693,13 @@ async function waitForDocumentReady() {
 			window.removeEventListener("load", done);
 			try {
 				mo?.disconnect();
-			} catch {}
+			} catch (e) {
+				if (ENABLE_KATEX_LOGGING) {
+					try {
+						console.error("[WebTeX] Failed to disconnect readiness observer:", e);
+					} catch {}
+				}
+			}
 			resolve();
 		};
 
@@ -1785,17 +1815,41 @@ function teardownNavigationHandlers() {
 		if (onVisibilityChangeRef)
 			document.removeEventListener("visibilitychange", onVisibilityChangeRef);
 		if (onPopStateRef) window.removeEventListener("popstate", onPopStateRef);
-	} catch {}
+	} catch (e) {
+		if (ENABLE_KATEX_LOGGING) {
+			try {
+				console.error("[WebTeX] Failed to remove navigation event listeners:", e);
+			} catch {}
+		}
+	}
 	try {
 		navigationObserverInstance?.disconnect();
-	} catch {}
+	} catch (e) {
+		if (ENABLE_KATEX_LOGGING) {
+			try {
+				console.error("[WebTeX] Failed to disconnect navigation observer:", e);
+			} catch {}
+		}
+	}
 	try {
 		if (origPushStateRef) history.pushState = origPushStateRef;
 		if (origReplaceStateRef) history.replaceState = origReplaceStateRef;
-	} catch {}
+	} catch (e) {
+		if (ENABLE_KATEX_LOGGING) {
+			try {
+				console.error("[WebTeX] Failed to restore history methods:", e);
+			} catch {}
+		}
+	}
 	try {
 		debouncedNavigationHandlerRef?.cancel?.();
-	} catch {}
+	} catch (e) {
+		if (ENABLE_KATEX_LOGGING) {
+			try {
+				console.error("[WebTeX] Failed to cancel debounced navigation handler:", e);
+			} catch {}
+		}
+	}
 
 	navigationObserverInstance = null;
 	debouncedNavigationHandlerRef = null;
@@ -1869,9 +1923,17 @@ function disableRendering() {
 		if (windowErrorHandlerRef) window.removeEventListener("error", windowErrorHandlerRef);
 		if (windowRejectionHandlerRef)
 			window.removeEventListener("unhandledrejection", windowRejectionHandlerRef);
-		if (storageChangedHandlerRef) chrome.storage.onChanged.removeListener(storageChangedHandlerRef);
-		if (runtimeMessageHandlerRef) chrome.runtime.onMessage.removeListener(runtimeMessageHandlerRef);
-	} catch {}
+		if (storageChangedHandlerRef)
+			chrome.storage.onChanged.removeListener(storageChangedHandlerRef);
+		if (runtimeMessageHandlerRef)
+			chrome.runtime.onMessage.removeListener(runtimeMessageHandlerRef);
+	} catch (e) {
+		if (ENABLE_KATEX_LOGGING) {
+			try {
+				console.error("[WebTeX] Failed to remove global/Chrome listeners:", e);
+			} catch {}
+		}
+	}
 
 	// Restore original DOM structure completely
 	document
