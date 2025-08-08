@@ -350,6 +350,12 @@ window.WebTeXLogging = {
 	hide: () => window.WebTeXLogging.setLevel(0),
 };
 
+// Handler references (declared before assignment to avoid ReferenceError in strict mode)
+let windowErrorHandlerRef;
+let windowRejectionHandlerRef;
+let storageChangedHandlerRef;
+let runtimeMessageHandlerRef;
+
 // Global error handler for WebTeX
 windowErrorHandlerRef = (event) => {
 	// catch all WebTeX errors
