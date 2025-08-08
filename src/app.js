@@ -403,15 +403,16 @@ chrome.storage.onChanged.addListener((changes) => {
 
 function reportKaTeXError(tex, error) {
 	const message = error?.message || (typeof error === "string" ? error : "Unknown KaTeX error");
-
-	// Add this 'if' block to ignore expected errors from the test suite
-	if (message.includes("Undefined control sequence")) {
-		return; // Don't log this specific error to the console
-	}
-
 	window.webtexErrors.push({ tex, message, time: Date.now() });
 	if (ENABLE_KATEX_LOGGING) {
-		log(LOG_LEVEL.WARN, "[WebTeX] KaTeX parse error:", message, "in", tex);
+		// Surface parse errors prominently when verbose logging is enabled
+		try {
+			console.error("[WebTeX] KaTeX parse error:", message, "in", tex, error);
+		} catch (_) {}
+		// Also use the internal logger for consistency
+		try {
+			log(LOG_LEVEL.ERROR, "[WebTeX] KaTeX parse error:", message, "in", tex);
+		} catch (_) {}
 	}
 
 	// Dispatch a custom event for external listeners/devtools panels
@@ -1172,14 +1173,9 @@ async function renderMathExpression(tex, displayMode = false, element = null) {
 		const katexOptions = {
 			displayMode: isDisplayMath,
 			errorColor: "inherit",
-			strict: (errorCode) => {
-				// Always ignore these known noisy warnings
-				if (errorCode === "newLineInDisplayMode") return "ignore";
-				if (errorCode === "mathVsTextAccents") return "ignore";
-				if (errorCode === "unknownSymbol") return "ignore";
-				// Gate remaining warnings based on user preference
-				return ENABLE_KATEX_LOGGING ? "warn" : "ignore";
-			},
+			// When verbose logging is enabled, surface all KaTeX strict warnings.
+			// Otherwise, suppress them to avoid console noise.
+			strict: (_errorCode) => (ENABLE_KATEX_LOGGING ? "warn" : "ignore"),
 			trust: false,
 			throwOnError: true, // We will catch the error
 		};
