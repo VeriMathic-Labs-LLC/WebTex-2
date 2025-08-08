@@ -1845,11 +1845,19 @@ function teardownNavigationHandlers() {
 	}
 	try {
 		if (origPushStateRef) history.pushState = origPushStateRef;
+	} catch (e) {
+		if (ENABLE_KATEX_LOGGING) {
+			try {
+				console.error("[WebTeX] Failed to restore history.pushState:", e);
+			} catch {}
+		}
+	}
+	try {
 		if (origReplaceStateRef) history.replaceState = origReplaceStateRef;
 	} catch (e) {
 		if (ENABLE_KATEX_LOGGING) {
 			try {
-				console.error("[WebTeX] Failed to restore history methods:", e);
+				console.error("[WebTeX] Failed to restore history.replaceState:", e);
 			} catch {}
 		}
 	}
