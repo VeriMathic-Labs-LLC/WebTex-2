@@ -350,7 +350,7 @@ window.WebTeXLogging = {
 	hide: () => window.WebTeXLogging.setLevel(0),
 };
 
-// Handler references (declared before assignment to avoid ReferenceError in strict mode)
+// Handler references (declared before assignment to prevent ReferenceError if used in cleanup before assignment)
 let windowErrorHandlerRef;
 let windowRejectionHandlerRef;
 let storageChangedHandlerRef;
@@ -401,7 +401,9 @@ async function loadKatexLoggingSetting() {
 		const { enableKatexLogging = false } = await chrome.storage.local.get("enableKatexLogging");
 		ENABLE_KATEX_LOGGING = enableKatexLogging ?? false;
 	} catch (e) {
-		console.error("[WebTeX] Failed to load 'enableKatexLogging' from storage:", e);
+		if (ENABLE_KATEX_LOGGING) {
+			console.error("[WebTeX] Failed to load 'enableKatexLogging' from storage:", e);
+		}
 	}
 }
 
@@ -2043,7 +2045,7 @@ function debounce(fn, ms) {
 		t = setTimeout(() => fn(...a), ms);
 	};
 	debounced.cancel = () => {
-		clearTimeout(t);
+		if (t) clearTimeout(t);
 	};
 	return debounced;
 }
