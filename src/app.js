@@ -1235,7 +1235,7 @@ async function renderMathExpression(tex, displayMode = false, element = null) {
 			try {
 				originalWarn.call(console, msg, ...rest);
 			} catch (e) {
-				console.error(e);
+				console.error("[WebTeX] Failed to forward KaTeX warning to console.warn:", e);
 			}
 		};
 		let rendered;
